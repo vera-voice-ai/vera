@@ -124,7 +124,7 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
     #expect(second[1].content?.contains("ответ: ок") == true)
 }
 
-@MainActor @Test func unknownVoicesNeverReachTheModelAsContext() async {
+@MainActor @Test func unknownVoicesReachTheModelMarkedAsUnknownWithTheOwnerEstimate() async {
     let bus = SignalBus(); let seen = Messages()
     let capture = await seen.start(bus)
     var ttl = SceneTTL(); ttl.verdictTimeout = 0.2
@@ -147,6 +147,7 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
     await bus.publish(SignalMessage(kind: .query, domain: .core, source: "t", target: "Scene", type: "scene.snapshot.get"))
     #expect(await eventually { seen.all.contains { $0.type == "scene.snapshot" } })
     let context = seen.all.last { $0.type == "scene.snapshot" }?.payload["context"] ?? ""
-    #expect(context.contains("неизвестный голос"))          // it is listed as someone around
-    #expect(!context.contains("новости по телевизору"))     // but what it said is not sent
+    #expect(context.contains("неизвестный голос"))              // it is listed as someone around
+    #expect(context.contains("новости по телевизору"))          // what it said is sent too: it may be the owner
+    #expect(context.contains("неопознанный голос, возможно владелец:"))   // marked, with the scene's estimate
 }

@@ -177,6 +177,9 @@ public struct SceneTurn: Sendable, Equatable, Identifiable {
     public var needsVerdict: Bool
     /// Smart Turn's probability for the turn's last utterance, when known.
     public var turnEndProbability: Double? = nil
+    /// The scene's own estimate that this turn was spoken by the owner, from the accumulated voice evidence.
+    /// Nil when there was no voice evidence. It matters most for turns whose speaker was not identified.
+    public var ownerProbability: Double? = nil
 
     public var isAwaiting: Bool { state == .awaiting }
 }
@@ -524,6 +527,7 @@ public struct SceneBuilder: Sendable {
                 textReadyAt[turns[index].id] = now
             }
             turns[index].addressed = addressed(turns[index], now)
+            turns[index].ownerProbability = members.compactMap(\.ownerLogOdds).max().map { 1 / (1 + exp(-$0)) }
             if Self.isNoise(text, ttl.noisePhrases) { decide(index, .heard(reason: "noise"), now); continue }
             if members.contains(where: { veraWasSpeaking(at: $0.startedAt, until: $0.endedAt ?? now) }) {
                 decide(index, .heard(reason: "vera_voice"), now); continue
