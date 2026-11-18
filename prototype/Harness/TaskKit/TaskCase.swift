@@ -86,7 +86,14 @@ public extension Suite {
                          "15": "пятнадцать", "16": "шестнадцать", "17": "семнадцать", "18": "восемнадцать",
                          "19": "девятнадцать", "20": "двадцать", "30": "тридцать", "40": "сорок",
                          "50": "пятьдесят", "100": "сто", "1.5": "полторы"]
-            return [value, value.replacingOccurrences(of: ".", with: ","), words[value]].compactMap { $0 }
+            var accepted = [value, value.replacingOccurrences(of: ".", with: ",")]
+            if let word = words[value] {
+                accepted.append(word)
+                // Long number words take case endings ("восемнадцати", "тридцати"), so match their stem too.
+                // Short words such as "два" or "одна" are not stemmed: a stem that short would match other words.
+                if word.count >= 6 { accepted.append(String(word.dropLast(3))) }
+            }
+            return accepted
         }
         func number(after marker: String, in text: String) -> String? {
             guard let range = text.range(of: marker) else { return nil }
