@@ -24,7 +24,7 @@ public struct ToolRegistry: Sendable {
     }
 }
 
-/// The four file tools, confined to one folder. Paths that leave it (by `..`, an absolute path or a symlink) are refused.
+/// The five file tools, confined to one folder. Paths that leave it (by `..`, an absolute path or a symlink) are refused.
 public struct WorkspaceTools: Sendable {
     public let root: URL
     public let maxReadCharacters = 20_000
@@ -33,7 +33,7 @@ public struct WorkspaceTools: Sendable {
     public init(root: URL) { self.root = root }
 
     public var registry: ToolRegistry {
-        ToolRegistry([ReadFileTool(box: self), ListDirectoryTool(box: self), WriteFileTool(box: self), ReplaceInFileTool(box: self)])
+        ToolRegistry([ReadFileTool(box: self), ListDirectoryTool(box: self), WriteFileTool(box: self), AppendToFileTool(box: self), ReplaceInFileTool(box: self)])
     }
 
     func resolve(_ path: String) -> URL? {
@@ -115,6 +115,28 @@ struct WriteFileTool: AgentTool {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try content.write(to: url, atomically: true, encoding: .utf8)
             return ToolResult(ok: true, text: "written \(path) (\(content.count) characters)")
+        } catch { return ToolResult(ok: false, text: "cannot write: \(error.localizedDescription)") }
+    }
+}
+
+struct AppendToFileTool: AgentTool {
+    let box: WorkspaceTools
+    var definition: ToolDefinition {
+        ToolDefinition(name: "append_to_file", description: "Add a line to the end of a file without touching the rest of it. Creates the file if it does not exist. Use this to add a line; do not rewrite the whole file to add one.",
+                       parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"string","description":"The text of the new line, without a line break"}},"required":["path","line"]}"#)
+    }
+    func run(argumentsJSON: String) -> ToolResult {
+        guard let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String, let line = args["line"] as? String else {
+            return ToolResult(ok: false, text: "bad arguments: need path and line")
+        }
+        guard line.count <= box.maxWriteCharacters else { return ToolResult(ok: false, text: "refused: line is too large") }
+        guard let url = box.resolve(path) else { return WorkspaceTools.outside }
+        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let separator = existing.isEmpty || existing.hasSuffix("\n") ? "" : "\n"
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try (existing + separator + line + "\n").write(to: url, atomically: true, encoding: .utf8)
+            return ToolResult(ok: true, text: "added a line to \(path)")
         } catch { return ToolResult(ok: false, text: "cannot write: \(error.localizedDescription)") }
     }
 }

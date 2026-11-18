@@ -46,6 +46,18 @@ private func call(_ tool: String, _ json: String) -> ToolCall { ToolCall(id: "c1
     #expect(!registry.run(call("read_file", #"{"path":"zzz"}"#)).text.contains("did you mean"))
 }
 
+@Test func appendAddsALineAndKeepsTheRestOfTheFile() {
+    let root = sandbox(["status.txt": "статус: draft\nавтор: тест\n", "bare.txt": "без перевода"])
+    let registry = WorkspaceTools(root: root).registry
+    #expect(registry.run(call("append_to_file", #"{"path":"status.txt","line":"число: 42"}"#)).ok)
+    #expect(registry.run(call("append_to_file", #"{"path":"bare.txt","line":"вторая"}"#)).ok)
+    #expect(registry.run(call("append_to_file", #"{"path":"new.txt","line":"первая"}"#)).ok)
+    #expect((try? String(contentsOf: root.appending(path: "status.txt"), encoding: .utf8)) == "статус: draft\nавтор: тест\nчисло: 42\n")
+    #expect((try? String(contentsOf: root.appending(path: "bare.txt"), encoding: .utf8)) == "без перевода\nвторая\n")
+    #expect((try? String(contentsOf: root.appending(path: "new.txt"), encoding: .utf8)) == "первая\n")
+    #expect(!registry.run(call("append_to_file", #"{"path":"../outside.txt","line":"x"}"#)).ok)
+}
+
 @Test func aLongFileIsCutAtTheReadLimitAndSaysSo() {
     let box = WorkspaceTools(root: sandbox(["big.txt": String(repeating: "а", count: 25_000)]))
     let result = box.registry.run(call("read_file", #"{"path":"big.txt"}"#))
