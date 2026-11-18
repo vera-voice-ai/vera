@@ -40,6 +40,10 @@ public final class SelfModifier: @unchecked Sendable {
         return ToolRegistry(base + [SelfTestTool(modifier: self), SelfCommitTool(modifier: self), SelfApplyTool(modifier: self)])
     }
 
+    /// The files that implement the gates and the owner-only rule. She can read them but not write them.
+    static let protectedFiles = ["Core/Agent/SelfModifier.swift", "Core/Agent/CoreAgent.swift", "Scene/SceneBuilder.swift",
+                                 "Evaluation/apply-self.sh", "Evaluation/night-run.sh"]
+
     // MARK: Gates
 
     func markEdited() { lock.withLock { testsFresh = false; committedAndTested = false } }
@@ -121,6 +125,11 @@ struct SelfFileTool: AgentTool {
         if let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String {
             let parts = path.split(separator: "/").map(String.init)
             if parts.contains(".git") || parts.contains(".build") { return ToolResult(ok: false, text: "refused: this folder is off limits") }
+        }
+        let writes = inner.definition.name != "read_file" && inner.definition.name != "list_dir"
+        if writes, let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String,
+           SelfModifier.protectedFiles.contains(where: { path.hasSuffix($0) }) {
+            return ToolResult(ok: false, text: "refused: this file holds the safety gates and may only be changed by a person")
         }
         let result = inner.run(argumentsJSON: argumentsJSON)
         if result.ok, inner.definition.name != "read_file", inner.definition.name != "list_dir" { modifier.markEdited() }

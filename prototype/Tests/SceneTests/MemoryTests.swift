@@ -96,3 +96,12 @@ private func fakeModifier(testOutput: String, testCode: Int32 = 0) throws -> (Se
     #expect(!CoreAgent.isApplyCommand("не применяй пока это"))
     #expect(!CoreAgent.isApplyCommand("если захочешь, можешь применять изменения когда-нибудь"))
 }
+
+@Test func theFilesThatHoldTheGatesCannotBeWrittenByVera() throws {
+    let (modifier, wt) = try fakeModifier(testOutput: "")
+    try FileManager.default.createDirectory(at: wt.appending(path: "Core/Agent"), withIntermediateDirectories: true)
+    try "x".write(to: wt.appending(path: "Core/Agent/SelfModifier.swift"), atomically: true, encoding: .utf8)
+    let tools = modifier.registry
+    #expect(!tools.run(ToolCall(id: "1", name: "self_write_file", arguments: #"{"path":"Core/Agent/SelfModifier.swift","content":"y"}"#)).ok)
+    #expect(tools.run(ToolCall(id: "2", name: "self_read_file", arguments: #"{"path":"Core/Agent/SelfModifier.swift"}"#)).ok)
+}
