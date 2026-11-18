@@ -46,6 +46,14 @@ private func call(_ tool: String, _ json: String) -> ToolCall { ToolCall(id: "c1
     #expect(!registry.run(call("read_file", #"{"path":"zzz"}"#)).text.contains("did you mean"))
 }
 
+@Test func aLongFileIsCutAtTheReadLimitAndSaysSo() {
+    let box = WorkspaceTools(root: sandbox(["big.txt": String(repeating: "а", count: 25_000)]))
+    let result = box.registry.run(call("read_file", #"{"path":"big.txt"}"#))
+    #expect(result.ok)
+    #expect(result.text.hasSuffix("\n[truncated]"))
+    #expect(result.text.count == box.maxReadCharacters + "\n[truncated]".count)
+}
+
 @Test func replaceNeedsAUniqueMatchUnlessToldOtherwise() throws {
     let root = sandbox(["a.txt": "один два один\n"])
     defer { try? FileManager.default.removeItem(at: root) }
