@@ -7,6 +7,9 @@ public struct OpenAICompatibleClient: ChatModel {
         public var endpoint = URL(string: "https://opencode.ai/inference/go/openai/v1/chat/completions")!
         /// Model id as the endpoint expects it, without the `opencode-go/` prefix.
         public var model = "deepseek-v4.1-flash"
+        /// "none" switches the model's hidden reasoning off: the first token then comes in about a second instead of four.
+        /// nil leaves the provider's default.
+        public var reasoningEffort: String? = "none"
         public var keyName = "OPENCODE_API_KEY"
         public var sessionID = UUID().uuidString.lowercased()
         /// The whole request may take this long.
@@ -31,7 +34,7 @@ public struct OpenAICompatibleClient: ChatModel {
 
     public func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
         guard let key = keyProvider(), !key.isEmpty else { throw ChatError.noKey }
-        let body = try Self.requestBody(model: configuration.model, messages: messages, tools: tools)
+        let body = try Self.requestBody(model: configuration.model, messages: messages, tools: tools, reasoningEffort: configuration.reasoningEffort)
         var request = URLRequest(url: configuration.endpoint, timeoutInterval: configuration.lifetime)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -121,7 +124,7 @@ public struct OpenAICompatibleClient: ChatModel {
         }
     }
 
-    static func requestBody(model: String, messages: [ChatMessage], tools: [ToolDefinition]) throws -> Data {
+    static func requestBody(model: String, messages: [ChatMessage], tools: [ToolDefinition], reasoningEffort: String? = nil) throws -> Data {
         var encoded: [[String: Any]] = []
         for message in messages {
             var item: [String: Any] = ["role": message.role.rawValue]
@@ -136,6 +139,7 @@ public struct OpenAICompatibleClient: ChatModel {
         }
         var body: [String: Any] = ["model": model, "messages": encoded, "stream": true,
                                    "stream_options": ["include_usage": true]]
+        if let reasoningEffort { body["reasoning_effort"] = reasoningEffort }
         if !tools.isEmpty {
             body["tools"] = try tools.map { tool -> [String: Any] in
                 guard let data = tool.parametersJSON.data(using: .utf8),

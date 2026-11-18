@@ -193,3 +193,25 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     #expect(agent.tasks.first?.error == "cancelled")
     #expect(await eventually { collector.messages.contains { $0.type == "output.speech.stop" } })
 }
+
+@MainActor @Test func stopHeardButNotAddressedStillCancelsARunningTask() async {
+    struct SlowModel: ChatModel {
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            try await Task.sleep(for: .seconds(30)); return ChatTurn()
+        }
+    }
+    let bus = SignalBus()
+    let agent = CoreAgent(loop: AgentLoop(model: SlowModel(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.setEnabled(true)
+    #expect(CoreAgent.isStopCommand("Stop."))
+    let consuming = Task { await agent.consume(bus) }
+    defer { consuming.cancel() }
+    try? await Task.sleep(for: .milliseconds(200))
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/a", "text": "Вера, долгая задача", "addressed": "likely"]))
+    let collector = Collector(); _ = collector
+    #expect(await eventually { agent.tasks.first?.state == .running })
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.heard",
+                                    payload: ["turn_id": "turn/b", "text": "Stop.", "addressed": "no", "reason": "not_addressed"]))
+    #expect(await eventually { agent.tasks.first?.state == .failed })
+}

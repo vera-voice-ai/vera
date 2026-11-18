@@ -84,6 +84,13 @@ public final class CoreAgent {
                 }
                 continue
             }
+            // "Стоп" is heard even when it is not addressed or Vera's own speech gate dropped it, but only while there is
+            // something to stop: a running task or speech that began less than a minute ago.
+            if isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.heard",
+               Self.isStopCommand(message.payload["text"] ?? ""), hasSomethingToStop {
+                await cancelAll(bus: bus, reason: "voice")
+                continue
+            }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
                   actsOnPossibleAddress || message.payload["addressed"] == "likely",
                   let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
@@ -108,6 +115,10 @@ public final class CoreAgent {
         }
     }
 
+    private var hasSomethingToStop: Bool {
+        tasks.contains { $0.state == .running || ($0.speechStartMilliseconds != nil && Date().timeIntervalSince($0.readyAt) < 60) }
+    }
+
     /// Stops what Core is doing and what Response is saying: the running task, the queued ones, the speech.
     public func cancelAll(bus: SignalBus?, reason: String) async {
         for work in live.values { work.cancel() }
@@ -123,7 +134,7 @@ public final class CoreAgent {
     public static func isStopCommand(_ text: String) -> Bool {
         let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
         guard (1...3).contains(words.count) else { return false }
-        let stops: Set<String> = ["стоп", "отмена", "отмени", "хватит", "замолчи", "молчи", "подожди", "погоди", "тихо", "перестань"]
+        let stops: Set<String> = ["stop", "top", "стоп", "стап", "отмена", "отмени", "хватит", "замолчи", "молчи", "подожди", "погоди", "тихо", "перестань"]
         let fillers: Set<String> = ["вера", "вер", "пожалуйста", "ну", "давай", "всё", "все", "уже", "так"]
         return words.contains { stops.contains($0) } && words.allSatisfy { stops.contains($0) || fillers.contains($0) }
     }
