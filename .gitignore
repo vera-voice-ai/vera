@@ -18,3 +18,6 @@ venv/
 *.log
 *.wav
 !prototype/Sensors/Workers/**/*.wav
+
+# Harness scoreboards (generated, local)
+prototype/Evaluation/runs/
