@@ -14,7 +14,10 @@ public struct LiveSpeechBuffer: Sendable {
     private let preRollLimitBytes = 16_000 * 2 * 9 / 10
     private let interimWindowLimitBytes = 16_000 * 2 * 8
     private let maxSegmentDurationMilliseconds = 14_000
-    private let finalSilenceDuration: TimeInterval = 2.0
+    /// Silence that closes an utterance. 1.0 s (effective 0.8-1.1 s: the gate sees 160 ms chunks) instead of the
+    /// former 2.0 s: on 7.7 h of tape it saves about 1 s per utterance for roughly 14 % more pieces, and the scene
+    /// joins the pieces of a person who pauses and goes on (same speaker, within 8 s).
+    private let finalSilenceDuration: TimeInterval
     private let interimInterval: TimeInterval = 0.5
 
     private var preRoll = Data()
@@ -23,6 +26,9 @@ public struct LiveSpeechBuffer: Sendable {
     private var lastVoiceAt: Date?
     private var lastInterimAt: Date?
     private var activeSegmentID = 0
+
+    /// For tests only: the configured silence.
+    public var finalSilenceForTests: TimeInterval { finalSilenceDuration }
 
     public var isSpeechActive: Bool { segmentStartedAt != nil }
     public var currentSegmentID: Int { activeSegmentID }
@@ -34,7 +40,7 @@ public struct LiveSpeechBuffer: Sendable {
         return Data(activePCM16.suffix(byteLimit))
     }
 
-    public init() {}
+    public init(finalSilenceDuration: TimeInterval = 1.0) { self.finalSilenceDuration = finalSilenceDuration }
 
     public mutating func append(samples16k: [Float], rms: Float, at time: Date = .now) -> LiveSpeechUpdate? {
         guard !samples16k.isEmpty else { return nil }

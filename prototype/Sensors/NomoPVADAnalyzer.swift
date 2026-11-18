@@ -15,6 +15,8 @@ public final class NomoPVADAnalyzer: Sendable {
         _ = try await worker.warm()
     }
 
+    public var processIdentifier: Int32? { worker.processIdentifier }
+
     public func score(_ samples: [Float]) async throws -> Double {
         let raw = samples.withUnsafeBytes { Data($0) }
         let line = try JSONSerialization.data(withJSONObject: ["pcm_f32le_base64": raw.base64EncodedString()])

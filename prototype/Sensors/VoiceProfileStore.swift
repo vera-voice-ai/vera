@@ -7,11 +7,14 @@ public struct SpeakerReference: Identifiable, Sendable {
     public let personID: String
     public let label: String
     public let templates: [[Float]]
+    /// `owner`, `human` or `assistant` (Vera's own synthetic voice).
+    public let role: String
 
     public var embedding: [Float] { templates.first ?? [] }
     public var templateCount: Int { templates.count }
 
-    public init(id: UUID = UUID(), personID: String, label: String, templates: [[Float]]) {
+    public init(id: UUID = UUID(), personID: String, label: String, templates: [[Float]], role: String = "human") {
+        self.role = role
         self.id = id
         self.personID = personID
         self.label = label
@@ -117,13 +120,13 @@ public enum SpeakerReferenceStore {
     private static func loadProfiles(databaseURL: URL) throws -> [SpeakerReference] {
         try withDatabase(databaseURL, write: false) { db in
             let statement = try prepare(db, """
-                SELECT p.person_id, p.display_name, t.vector
+                SELECT p.person_id, p.display_name, t.vector, p.is_owner, p.participant_type
                 FROM people p JOIN speaker_templates t ON t.person_id=p.person_id
                 WHERE p.profile_status!='disabled_by_user'
                 ORDER BY p.person_id, t.template_index
                 """)
             defer { sqlite3_finalize(statement) }
-            var grouped: [(personID: String, label: String, vectors: [[Float]])] = []
+            var grouped: [(personID: String, label: String, vectors: [[Float]], role: String)] = []
             var positions: [String: Int] = [:]
             while sqlite3_step(statement) == SQLITE_ROW {
                 guard let personID = columnText(statement, 0), let label = columnText(statement, 1),
@@ -134,11 +137,13 @@ public enum SpeakerReferenceStore {
                     grouped[index].vectors.append(values)
                 } else {
                     positions[personID] = grouped.count
-                    grouped.append((personID, label, [values]))
+                    let role = sqlite3_column_int(statement, 3) == 1 ? "owner"
+                        : (columnText(statement, 4) == "synthetic_assistant" ? "assistant" : "human")
+                    grouped.append((personID, label, [values], role))
                 }
             }
             return grouped.map { SpeakerReference(id: stableID(for: $0.personID), personID: $0.personID,
-                                                  label: $0.label, templates: $0.vectors) }
+                                                  label: $0.label, templates: $0.vectors, role: $0.role) }
         }
     }
 

@@ -9,6 +9,10 @@ let package = Package(
         .target(name: "SignalBus", path: "SignalBus"),
         .target(name: "Sensors", dependencies: ["SignalBus"], path: "Sensors", resources: [.copy("Workers")]),
         .target(name: "Scene", dependencies: ["SignalBus"], path: "Scene"),
-        .executableTarget(name: "VeraSensorPrototype", dependencies: ["SignalBus", "Sensors", "Scene"], path: "App")
+        .target(name: "Core", dependencies: ["SignalBus"], path: "Core"),
+        .target(name: "HarnessKit", dependencies: ["Scene", "SignalBus"], path: "Harness/Kit"),
+        .executableTarget(name: "Harness", dependencies: ["HarnessKit"], path: "Harness/CLI"),
+        .executableTarget(name: "VeraSensorPrototype", dependencies: ["SignalBus", "Sensors", "Scene", "Core"], path: "App"),
+        .testTarget(name: "SceneTests", dependencies: ["Scene", "SignalBus", "Sensors", "Core", "HarnessKit"], path: "Tests/SceneTests")
     ]
 )

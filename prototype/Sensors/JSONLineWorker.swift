@@ -23,6 +23,12 @@ public final class JSONLineWorker: @unchecked Sendable {
         try await perform { try self.ensureStarted() }
     }
 
+    /// Child process identifier for live resource sampling; nil when the worker is down.
+    /// Never call from inside this worker's own queue blocks.
+    public var processIdentifier: Int32? {
+        queue.sync { process?.isRunning == true ? process?.processIdentifier : nil }
+    }
+
     public func send(_ jsonLine: String, timeout: TimeInterval = 180) async throws -> String {
         try await perform {
             _ = try self.ensureStarted()

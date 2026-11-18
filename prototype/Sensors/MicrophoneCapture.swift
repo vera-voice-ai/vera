@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import Foundation
 
@@ -14,13 +15,13 @@ public struct MicrophoneChunk: Sendable {
 public final class MicrophoneCapture: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let queue = DispatchQueue(label: "vera.sensors.microphone.capture", qos: .userInitiated)
-    private var converter: AVAudioConverter?
     private var sourceRate: Double = 0
-    private var pending: [Float] = []
     private var sourcePending: [Float] = []
     private var handler: (@Sendable (MicrophoneChunk) -> Void)?
     private var voiceProcessingActive = false
     private let chunkSamples = 2_560
+    private var lowPassKernel: [Float] = []
+    private var lowPassHistory: [Float] = []
 
     public init() {}
 
@@ -38,16 +39,10 @@ public final class MicrophoneCapture: @unchecked Sendable {
             throw NSError(domain: "VeraMicrophone", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "Микрофон не вернул аудиоформат"])
         }
-        let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
-                                         channels: 1, interleaved: false)!
-        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
-            throw NSError(domain: "VeraMicrophone", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "Не удалось подготовить преобразование аудиопотока"])
-        }
-        self.converter = converter
         self.sourceRate = sourceFormat.sampleRate
+        self.lowPassKernel = Self.lowPassKernel(sourceRate: sourceFormat.sampleRate)
+        self.lowPassHistory = [Float](repeating: 0, count: max(0, lowPassKernel.count - 1))
         self.handler = onChunk
-        self.pending.removeAll(keepingCapacity: true)
         self.sourcePending.removeAll(keepingCapacity: true)
         input.installTap(onBus: 0, bufferSize: 1_024, format: sourceFormat) { [weak self] buffer, _ in
             self?.consume(buffer)
@@ -67,36 +62,17 @@ public final class MicrophoneCapture: @unchecked Sendable {
             if engine.isRunning { engine.stop() }
             engine.inputNode.removeTap(onBus: 0)
             handler = nil
-            converter = nil
-            pending.removeAll(keepingCapacity: false)
             sourcePending.removeAll(keepingCapacity: false)
         }
     }
 
     private func consume(_ input: AVAudioPCMBuffer) {
-        guard let converter else { return }
-        let capacity = AVAudioFrameCount(Double(input.frameLength) * 16_000 / max(1, sourceRate) + 256)
-        guard let output = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                                                      sampleRate: 16_000, channels: 1,
-                                                                      interleaved: false)!,
-                                               frameCapacity: capacity) else { return }
-        var supplied = false
-        var conversionError: NSError?
-        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            if supplied { inputStatus.pointee = .noDataNow; return nil }
-            supplied = true
-            inputStatus.pointee = .haveData
-            return input
-        }
         appendSourceSamples(input)
-        guard status != .error, let channel = output.floatChannelData?[0], output.frameLength > 0 else { return }
-        pending.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
-        let sourceChunkSamples = max(1, Int((sourceRate * 0.16).rounded()))
-        while pending.count >= chunkSamples && sourcePending.count >= sourceChunkSamples {
-            let samples = Array(pending.prefix(chunkSamples))
-            pending.removeFirst(chunkSamples)
+        let sourceChunkSamples = max(2, Int((sourceRate * 0.16).rounded()))
+        while sourcePending.count >= sourceChunkSamples {
             let sourceSamples = Array(sourcePending.prefix(sourceChunkSamples))
             sourcePending.removeFirst(sourceChunkSamples)
+            let samples = Self.resample(antiAlias(sourceSamples), from: sourceRate, outputCount: chunkSamples)
             var peak: Float = 0
             var sum: Double = 0
             for sample in sourceSamples {
@@ -116,6 +92,57 @@ public final class MicrophoneCapture: @unchecked Sendable {
                                      peak: peak, inputSampleRate: sourceRate,
                                      voiceProcessingActive: voiceProcessingActive))
         }
+    }
+
+    /// Low-pass before decimation: without it, content above 8 kHz in a 48 kHz
+    /// capture folds back into the 0–8 kHz speech band and degrades ASR and
+    /// speaker embeddings. Stateful across chunks, so there is no seam per 160 ms.
+    private func antiAlias(_ input: [Float]) -> [Float] {
+        guard lowPassKernel.count > 1 else { return input }
+        let padded = lowPassHistory + input
+        lowPassHistory = Array(padded.suffix(lowPassKernel.count - 1))
+        // Symmetric kernel, so vDSP correlation equals convolution.
+        return vDSP.convolve(padded, withKernel: lowPassKernel)
+    }
+
+    /// Hann-windowed sinc, cutoff 7.2 kHz (below the 8 kHz Nyquist of 16 kHz output).
+    private static func lowPassKernel(sourceRate: Double) -> [Float] {
+        guard sourceRate > 16_001 else { return [] }
+        let taps = 63
+        let cutoff = 7_200 / sourceRate
+        let mid = Double(taps - 1) / 2
+        var kernel = (0..<taps).map { index -> Double in
+            let x = Double(index) - mid
+            let sinc = x == 0 ? 2 * cutoff : sin(2 * .pi * cutoff * x) / (.pi * x)
+            let window = 0.5 - 0.5 * cos(2 * .pi * Double(index) / Double(taps - 1))
+            return sinc * window
+        }
+        let sum = kernel.reduce(0, +)
+        kernel = kernel.map { $0 / sum }
+        return kernel.map(Float.init)
+    }
+
+    /// Linear-interpolation downsampler in the style of Vera 1 (`AcousticEchoDetector.resample`):
+    /// deterministic, no OS converter involved.
+    private static func resample(_ input: [Float], from sourceRate: Double, outputCount: Int) -> [Float] {
+        guard input.count >= 2, sourceRate > 0, outputCount > 0 else {
+            return [Float](repeating: 0, count: max(outputCount, 0))
+        }
+        if abs(sourceRate - 16_000) < 1 {
+            if input.count >= outputCount { return Array(input.prefix(outputCount)) }
+            return input + [Float](repeating: 0, count: outputCount - input.count)
+        }
+        let step = sourceRate / 16_000
+        var output: [Float] = []
+        output.reserveCapacity(outputCount)
+        for index in 0..<outputCount {
+            let position = Double(index) * step
+            let lower = min(input.count - 1, Int(position))
+            let upper = min(input.count - 1, lower + 1)
+            let fraction = Float(position - Double(lower))
+            output.append(input[lower] * (1 - fraction) + input[upper] * fraction)
+        }
+        return output
     }
 
     private func appendSourceSamples(_ buffer: AVAudioPCMBuffer) {

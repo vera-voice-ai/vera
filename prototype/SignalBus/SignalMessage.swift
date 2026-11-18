@@ -16,11 +16,17 @@ public struct SignalMessage: Identifiable, Codable, Sendable {
     public let target: String?
     public let type: String
     public let timestamp: Date
+    public let subjectID: String?
+    public let revision: UInt64?
+    public let correlationID: String?
+    public let causationID: String?
     public let payload: [String: String]
 
     public init(kind: SignalKind = .event, domain: SignalDomain = .sensors,
                 source: String, target: String? = nil, type: String,
-                timestamp: Date = .now, payload: [String: String] = [:]) {
+                timestamp: Date = .now, subjectID: String? = nil,
+                revision: UInt64? = nil, correlationID: String? = nil, causationID: String? = nil,
+                payload: [String: String] = [:]) {
         self.id = UUID()
         self.kind = kind
         self.domain = domain
@@ -28,6 +34,10 @@ public struct SignalMessage: Identifiable, Codable, Sendable {
         self.target = target
         self.type = type
         self.timestamp = timestamp
+        self.subjectID = subjectID
+        self.revision = revision
+        self.correlationID = correlationID
+        self.causationID = causationID
         self.payload = payload
     }
 }

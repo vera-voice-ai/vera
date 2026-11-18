@@ -33,6 +33,8 @@ public final class GigaAMAnalyzer: Sendable {
 
     public func warm() async throws -> String { try await worker.warm() }
 
+    public var processIdentifier: Int32? { worker.processIdentifier }
+
     public func transcribe(wav: Data) async throws -> String {
         let request = try JSONEncoder().encode(AudioRequest(wavBase64: wav.base64EncodedString()))
         let response = try await worker.send(String(decoding: request, as: UTF8.self))
@@ -60,6 +62,8 @@ public final class SpeakerEmbeddingAnalyzer: Sendable {
     }
 
     public func warm() async throws -> String { try await worker.warm() }
+
+    public var processIdentifier: Int32? { worker.processIdentifier }
 
     public func embed(wav: Data) async throws -> SpeakerEmbedding {
         let request = try JSONEncoder().encode(AudioRequest(wavBase64: wav.base64EncodedString()))
@@ -98,6 +102,8 @@ public final class VoxLockAnalyzer: Sendable {
     }
 
     public func warm() async throws -> String { try await worker.warm() }
+
+    public var processIdentifier: Int32? { worker.processIdentifier }
 
     public func isolate(wav: Data) async throws -> VoxLockResult {
         let started = ContinuousClock.now

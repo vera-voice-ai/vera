@@ -6,6 +6,9 @@ public struct ModelRuntime: Sendable {
     public let gigaAMModelURL: URL
     public let speakerModelURL: URL
     public let voxLockModelDirectory: URL
+    public let jevPythonURL: URL
+    public let smartTurnModelURL: URL
+    public let sileroVADModelURL: URL
     public let nomoPythonURL: URL
     public let nomoModelDirectory: URL
     public let appSupportURL: URL
@@ -26,6 +29,11 @@ public struct ModelRuntime: Sendable {
         self.usersURL = appSupportURL.appending(path: "Users", directoryHint: .isDirectory)
         self.peopleDatabaseURL = usersURL.appending(path: "people.sqlite")
         self.alexTargetVoiceURL = usersURL.appending(path: "voice-samples/alex/enrollment/target-voice-5.wav")
+        self.sileroVADModelURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "VeraSensorPrototype/Models/SileroVAD/silero_vad.onnx")
+        self.smartTurnModelURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "VeraSensorPrototype/Models/SmartTurn/smart-turn-v3.2-cpu.onnx")
+        self.jevPythonURL = root.appending(path: "Support/jev-decision/.venv/bin/python")
         self.nomoPythonURL = appSupportURL.appending(path: "Python/NomoPVAD/bin/python")
         self.nomoModelDirectory = appSupportURL.appending(path: "Models/NomoPVAD", directoryHint: .isDirectory)
     }
@@ -44,6 +52,27 @@ public struct ModelRuntime: Sendable {
         FileManager.default.isExecutableFile(atPath: pythonURL.path) &&
         FileManager.default.fileExists(atPath: voxLockModelDirectory.appending(path: "voxlock_enroll.onnx").path) &&
         FileManager.default.fileExists(atPath: voxLockModelDirectory.appending(path: "voxlock_chunk_int8.onnx").path)
+    }
+
+    /// Jev-Style 2B (MLX, 8 bit) runs from Vera 1's separate environment; weights come from the Hugging Face cache.
+    public var jevAvailable: Bool {
+        FileManager.default.isExecutableFile(atPath: jevPythonURL.path) &&
+        FileManager.default.fileExists(atPath: FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: ".cache/huggingface/hub/models--chaoliangUNSW--Jev-Style-2B-Decision-v4-MLX").path)
+    }
+
+    /// Smart Turn v3.2 (Pipecat, BSD-2): end-of-turn from audio. Runs in the shared Silero/GigaAM environment
+    /// (onnxruntime, soundfile, scipy); the 8.7 MB model was downloaded from the official Hugging Face repository.
+    public var smartTurnAvailable: Bool {
+        FileManager.default.isExecutableFile(atPath: pythonURL.path) &&
+        FileManager.default.fileExists(atPath: smartTurnModelURL.path)
+    }
+
+    /// Silero VAD v5 (MIT, 2.3 MB ONNX): speech probability per 32 ms window. Runs next to the energy gate, in the
+    /// shared Silero/GigaAM environment.
+    public var sileroVADAvailable: Bool {
+        FileManager.default.isExecutableFile(atPath: pythonURL.path) &&
+        FileManager.default.fileExists(atPath: sileroVADModelURL.path)
     }
 
     public var nomoPVADAvailable: Bool {
