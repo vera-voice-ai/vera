@@ -179,11 +179,14 @@ final class PrototypeModel {
         let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
         self.sileroSpeech = SileroSpeech(runtime: runtime, voice: "baya")
         self.speaker = ResponseSpeaker(synthesizer: SileroSynthesizer(speech: sileroSpeech), player: WavPlayer(), voice: "baya")
+        let skillStore = SkillStore(directory: runtime.appSupportURL.appending(path: "Skills", directoryHint: .isDirectory))
+        Self.seedSkills(in: skillStore.directory)
         let memory = MemoryStore(directory: runtime.appSupportURL.appending(path: "Memory", directoryHint: .isDirectory))
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
-                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)), systemPrompt: VeraPrompt.system) : nil,
+                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry), systemPrompt: VeraPrompt.system) : nil,
             unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
+        self.agent.skills = skillStore
         self.tape = AudioTape(directory: runtime.appSupportURL.appending(path: "Tape", directoryHint: .isDirectory))
         let gigaAMAnalyzer = GigaAMAnalyzer(runtime: runtime)
         let camPlusAnalyzer = SpeakerEmbeddingAnalyzer(runtime: runtime)
@@ -1228,5 +1231,22 @@ final class PrototypeModel {
     func formatDuration(_ seconds: Double) -> String {
         let total = max(0, Int(seconds))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    /// A starting skill, written only if the folder is empty; the owner and Vera edit these files afterwards.
+    nonisolated static func seedSkills(in directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        guard ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).isEmpty else { return }
+        let text = """
+        ---
+        name: edit-file
+        description: как менять существующий файл в рабочей папке и убедиться, что получилось
+        ---
+        1. Сначала прочитай файл целиком (read_file), не угадывай содержимое.
+        2. Меняй точечно через replace_in_file; write_file только для новых файлов или полной замены.
+        3. После правки прочитай файл ещё раз и сверь результат с просьбой.
+        4. В ответе скажи одной фразой, что именно изменено.
+        """
+        try? text.write(to: directory.appending(path: "edit-file.md"), atomically: true, encoding: .utf8)
     }
 }

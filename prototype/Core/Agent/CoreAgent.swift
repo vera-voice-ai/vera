@@ -46,6 +46,8 @@ public final class CoreAgent {
     public var streamsSpeech = true
     /// Facts and finished tasks kept between restarts; nil means Core forgets everything when the app closes.
     public var memory: MemoryStore?
+    /// Skills listed to the model by name and description; it loads the full text itself.
+    public var skills: SkillStore?
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
@@ -168,6 +170,7 @@ public final class CoreAgent {
         let contextStart = Date()
         var context = await sceneContext(bus: bus, excluding: turnID)
         update(id) { $0.contextMilliseconds = Int(Date().timeIntervalSince(contextStart) * 1000) }
+        if let catalog = skills?.catalogText() { context = [context, catalog].compactMap { $0 }.joined(separator: "\n") }
         if let facts = memory?.factsText() { context = [context, facts].compactMap { $0 }.joined(separator: "\n") }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
         // The answer is spoken sentence by sentence as it is written, one command per sentence, in order.
