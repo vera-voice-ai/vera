@@ -2,7 +2,7 @@
 # Overnight work on Vera. Each run: safe checks (unit tests, TaskBench), then one headless Claude session that makes a
 # small, tested improvement and commits it on the branch (never pushes). Safety rules are in the prompt below.
 # Usage: night-run.sh          one run
-#        night-run.sh loop     runs at +1 h, +2 h, then every 30 min until 07:00 local time
+#        night-run.sh loop     runs at +1 h, +2 h, then every 30 min until 01:00 local time
 # Needs OPENCODE_API_KEY in the environment for TaskBench. NIGHT_DEV=0 turns the development session off (checks only).
 setopt no_unset
 ROOT=/Users/alex/Projects/vera-v2
@@ -39,9 +39,12 @@ run_once() {
 }
 
 if [ "${1:-}" = "loop" ]; then
-  sleep 3600; run_once
-  sleep 3600; run_once
-  while [ "$(date +%H%M)" -lt 0700 ] || [ "$(date +%H)" -ge 12 ]; do
+  run_once; sleep 3600; run_once
+  run_once; sleep 3600; run_once
+  # Until 01:00 local (Moscow) time: the owner wakes at about 01:30 Moscow time.
+  end=$(date -j -f "%Y-%m-%d %H:%M" "$(date +%Y-%m-%d) 01:00" +%s)
+  [ "$(date +%s)" -gt "$end" ] && end=$(( end + 86400 ))
+  while [ "$(date +%s)" -lt "$end" ]; do
     run_once; sleep 1800
   done
 else
