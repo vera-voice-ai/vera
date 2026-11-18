@@ -31,6 +31,13 @@ public final class CoreAgent {
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
+    private var pendingScene: [String: CheckedContinuation<String?, Never>] = [:]
+    /// Tasks run one at a time, in the order heard: two of them editing the same folder at once would race.
+    private var queueTail: Swift.Task<Void, Never>?
+    /// Ask the scene for the situation and pass it to the model with every task.
+    public var includesSceneContext = true
+    /// How long a task waits for the scene's answer before going on without context.
+    public var sceneTimeout: TimeInterval = 1.5
 
     /// `loop` is nil when no model is configured (for example no key): the agent then reports why instead of acting.
     public init(loop: AgentLoop?, unavailableReason: String? = nil) {
@@ -43,13 +50,46 @@ public final class CoreAgent {
     public func consume(_ bus: SignalBus) async {
         let stream = await bus.subscribe()
         for await message in stream {
+            if message.kind == .reply, message.type == "scene.snapshot", let id = message.correlationID,
+               let waiting = pendingScene.removeValue(forKey: id) {
+                waiting.resume(returning: message.payload["context"])
+                continue
+            }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
                   actsOnPossibleAddress || message.payload["addressed"] == "likely",
                   let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
             let text = Self.stripAddress(message.payload["text"] ?? "")
             guard !text.isEmpty else { continue }
-            _ = await run(request: text, turnID: turnID, bus: bus, causation: message.id)
+            // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
+            let previous = queueTail
+            queueTail = Swift.Task { @MainActor in
+                await previous?.value
+                _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id)
+            }
         }
+    }
+
+    /// Reads the scene by asking it (query/reply on the bus). Nil when it does not answer in time.
+    private func sceneContext(bus: SignalBus?, excluding turnID: String?) async -> String? {
+        guard includesSceneContext, let bus else { return nil }
+        let query = SignalMessage(kind: .query, domain: .core, source: "Core.Agent", target: "Scene", type: "scene.snapshot.get",
+                                  payload: ["exclude_turn": turnID ?? ""])
+        let key = query.id.uuidString
+        return await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            pendingScene[key] = continuation
+            Swift.Task { @MainActor in
+                await bus.publish(query)
+                try? await Swift.Task.sleep(for: .seconds(self.sceneTimeout))
+                if let waiting = self.pendingScene.removeValue(forKey: key) { waiting.resume(returning: nil) }
+            }
+        }
+    }
+
+    /// What the owner and Vera did a moment ago, so that a follow-up ("а теперь верни обратно") makes sense.
+    private func recentTasksText() -> String? {
+        let recent = tasks.filter { $0.state != .running && Date().timeIntervalSince($0.startedAt) < 600 }.prefix(3).reversed()
+        guard !recent.isEmpty else { return nil }
+        return "Недавние задачи (старые сверху):\n" + recent.map { "- просьба: \(String($0.request.prefix(200))) → ответ: \(String($0.answer.prefix(200)))" }.joined(separator: "\n")
     }
 
     /// Runs one task. Also the entry point for benchmarks.
@@ -65,7 +105,9 @@ public final class CoreAgent {
         await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.started",
                                          subjectID: id, causationID: causation?.uuidString.lowercased(),
                                          payload: ["task_id": id, "request_chars": "\(request.count)"]))
-        let result = await loop.run(request: request) { [weak self] event in
+        var context = await sceneContext(bus: bus, excluding: turnID)
+        if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
+        let result = await loop.run(request: request, context: context) { [weak self] event in
             guard let self else { return }
             Swift.Task { @MainActor in
                 if case let .toolCalled(record) = event {

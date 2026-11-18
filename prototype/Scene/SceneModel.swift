@@ -127,6 +127,38 @@ public final class SceneModel {
         requestVerdicts(for: snapshot, bus: bus)
     }
 
+    /// The situation in words, for a model: who is around and what was said lately, oldest first. The turn that is
+    /// being handled right now is left out. Noise, Vera's own voice and turns without text are not shown.
+    func contextText(excluding turnID: String?) -> String {
+        guard let content = snapshot?.content else { return "" }
+        func role(_ role: SceneParticipant.Role) -> String {
+            switch role { case .owner: return "владелец"; case .human: return "человек"; case .assistant: return "Вера"; case .unknown: return "неизвестный голос" }
+        }
+        func age(_ date: Date) -> String {
+            let seconds = max(0, Int(Date().timeIntervalSince(date)))
+            return seconds < 90 ? "\(seconds) с назад" : "\(seconds / 60) мин назад"
+        }
+        var lines = ["Рядом сейчас: " + (content.participants.isEmpty ? "никого не слышно"
+                                          : content.participants.map { "\($0.label) (\(role($0.role)))" }.joined(separator: ", "))]
+        let turns = content.turns.reversed().filter { turn in
+            guard turn.id != turnID, !turn.text.isEmpty else { return false }
+            switch turn.state {
+            case .ready: return true
+            case let .heard(reason): return reason == "not_addressed"
+            case .awaiting: return false
+            }
+        }.suffix(6)
+        if !turns.isEmpty {
+            lines.append("Последние реплики (старые сверху):")
+            for turn in turns {
+                var kind = "фон"
+                if case .ready = turn.state { kind = "к Вере" }
+                lines.append("- \(turn.speakerLabel ?? "кто-то"), \(kind), \(age(turn.endedAt)): \(String(turn.text.prefix(400)))")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private func snapshotReply(to query: SignalMessage) -> SignalMessage {
         var payload = snapshot?.payload ?? [:]
         let content = snapshot?.content
@@ -134,6 +166,7 @@ public final class SceneModel {
         payload["status"] = (content?.status ?? .idle).rawValue
         payload["participants"] = (content?.participants ?? []).map { "\($0.label):\($0.role.rawValue)" }.joined(separator: ", ")
         payload["turn_count"] = "\(content?.turns.count ?? 0)"
+        payload["context"] = contextText(excluding: query.payload["exclude_turn"].flatMap { $0.isEmpty ? nil : $0 })
         return SignalMessage(kind: .reply, domain: .scene, source: "Scene.Model", target: query.source,
                              type: "scene.snapshot", subjectID: "scene/main",
                              revision: snapshot?.revision, correlationID: query.id.uuidString,

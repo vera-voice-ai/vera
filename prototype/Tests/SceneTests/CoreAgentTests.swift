@@ -166,3 +166,36 @@ private func turn(text: String = "", calls: [ToolCall] = []) -> ChatTurn {
     for _ in 0..<40 where agent.tasks.count < 2 { try? await Task.sleep(for: .milliseconds(50)) }
     #expect(agent.tasks.count == 2)
 }
+
+private actor Overlap {
+    private(set) var running = 0
+    private(set) var maximum = 0
+    func enter() { running += 1; maximum = max(maximum, running) }
+    func leave() { running -= 1 }
+}
+
+@MainActor @Test func tasksHeardCloseTogetherRunOneAtATime() async {
+    struct SlowModel: ChatModel {
+        let overlap: Overlap
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            await overlap.enter()
+            try? await Task.sleep(for: .milliseconds(150))
+            await overlap.leave()
+            var turn = ChatTurn(); turn.text = "ок"; return turn
+        }
+    }
+    let overlap = Overlap(); let bus = SignalBus()
+    let agent = CoreAgent(loop: AgentLoop(model: SlowModel(overlap: overlap), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.includesSceneContext = false
+    agent.setEnabled(true)
+    let task = Task { await agent.consume(bus) }
+    defer { task.cancel() }
+    try? await Task.sleep(for: .milliseconds(150))
+    for n in 1...3 {
+        await bus.publish(SignalMessage(domain: .scene, source: "Scene.Builder", type: "scene.turn.ready",
+                                        payload: ["turn_id": "turn/\(n)", "text": "Вера, сделай \(n)", "addressed": "likely"]))
+    }
+    for _ in 0..<100 where agent.tasks.filter({ $0.state == .done }).count < 3 { try? await Task.sleep(for: .milliseconds(50)) }
+    #expect(agent.tasks.filter { $0.state == .done }.count == 3)
+    #expect(await overlap.maximum == 1)
+}
