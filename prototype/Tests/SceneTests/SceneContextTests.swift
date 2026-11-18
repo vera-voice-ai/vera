@@ -123,3 +123,30 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
     #expect(second[1].content?.contains("поменяй draft на final") == true)
     #expect(second[1].content?.contains("ответ: ок") == true)
 }
+
+@MainActor @Test func unknownVoicesNeverReachTheModelAsContext() async {
+    let bus = SignalBus(); let seen = Messages()
+    let capture = await seen.start(bus)
+    var ttl = SceneTTL(); ttl.verdictTimeout = 0.2
+    let scene = SceneModel(ttl: ttl)
+    let sceneTask = Task { await scene.consume(bus) }
+    defer { capture.cancel(); sceneTask.cancel() }
+    try? await Task.sleep(for: .milliseconds(250))
+    await bus.publish(sensor("audio.microphone.started"))
+    let id = "utterance/s1-seg1"
+    await bus.publish(sensor("speech.segment.started", subject: id))
+    // Two windows that match nobody: the voice is filed as unknown.
+    for _ in 0..<3 {
+        await bus.publish(SignalMessage(source: "t", type: "speaker.live.similarity.computed", correlationID: id,
+                                        payload: ["reference": "кто-то", "person_id": "p9", "participant_role": "human",
+                                                  "cosine_similarity": "0.30", "margin": "0.01", "owner_cosine": "0.2"]))
+    }
+    await bus.publish(sensor("speech.segment.ended", subject: id, ["reason": "silence"]))
+    await bus.publish(sensor("speech.transcript.final", subject: id, revision: 1, ["lane": "raw", "text": "новости по телевизору"]))
+    try? await Task.sleep(for: .milliseconds(500))
+    await bus.publish(SignalMessage(kind: .query, domain: .core, source: "t", target: "Scene", type: "scene.snapshot.get"))
+    #expect(await eventually { seen.all.contains { $0.type == "scene.snapshot" } })
+    let context = seen.all.last { $0.type == "scene.snapshot" }?.payload["context"] ?? ""
+    #expect(context.contains("неизвестный голос"))          // it is listed as someone around
+    #expect(!context.contains("новости по телевизору"))     // but what it said is not sent
+}

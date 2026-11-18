@@ -128,7 +128,7 @@ public final class SceneModel {
     }
 
     /// The situation in words, for a model: who is around and what was said lately, oldest first. The turn that is
-    /// being handled right now is left out. Noise, Vera's own voice and turns without text are not shown.
+    /// being handled right now is left out. Noise, Vera's own voice, unknown voices and turns without text are not shown.
     func contextText(excluding turnID: String?) -> String {
         guard let content = snapshot?.content else { return "" }
         func role(_ role: SceneParticipant.Role) -> String {
@@ -142,6 +142,9 @@ public final class SceneModel {
                                           : content.participants.map { "\($0.label) (\(role($0.role)))" }.joined(separator: ", "))]
         let turns = content.turns.reversed().filter { turn in
             guard turn.id != turnID, !turn.text.isEmpty else { return false }
+            // A voice nobody knows is usually the television or a stranger: not useful to the model, and not
+            // something to send to a cloud service. Turns whose speaker is still undecided are kept.
+            if turn.speakerID == "unknown" { return false }
             switch turn.state {
             case .ready: return true
             case let .heard(reason): return reason == "not_addressed"
