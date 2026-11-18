@@ -19,6 +19,13 @@ public final class CoreAgent {
         public var firstTokenMilliseconds: Int?
         public var error: String?
         public let startedAt = Date()
+        /// When the scene handed the turn over (the start of Core's part of the delay).
+        public var readyAt = Date()
+        /// Stage timings, milliseconds: waiting in the queue, asking the scene, then the model and tools (`totalMilliseconds`).
+        public var queueMilliseconds = 0
+        public var contextMilliseconds = 0
+        /// From the hand-over to the first sound of the spoken answer; nil until she starts speaking.
+        public var speechStartMilliseconds: Int?
     }
 
     /// Newest first, the last 20.
@@ -55,6 +62,12 @@ public final class CoreAgent {
                 waiting.resume(returning: message.payload["context"])
                 continue
             }
+            if message.domain == .response, message.type == "output.speech.started", let taskID = message.correlationID {
+                update(taskID) { task in
+                    if task.speechStartMilliseconds == nil { task.speechStartMilliseconds = Int(Date().timeIntervalSince(task.readyAt) * 1000) }
+                }
+                continue
+            }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
                   actsOnPossibleAddress || message.payload["addressed"] == "likely",
                   let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
@@ -64,7 +77,7 @@ public final class CoreAgent {
             let previous = queueTail
             queueTail = Swift.Task { @MainActor in
                 await previous?.value
-                _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id)
+                _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp)
             }
         }
     }
@@ -94,18 +107,23 @@ public final class CoreAgent {
 
     /// Runs one task. Also the entry point for benchmarks.
     @discardableResult
-    public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil) async -> AgentResult {
+    public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil, readyAt: Date? = nil) async -> AgentResult {
         guard let loop else {
             var result = AgentResult(); result.error = unavailableReason
             return result
         }
         let id = "task/\(turnID?.replacingOccurrences(of: "turn/", with: "") ?? UUID().uuidString.prefix(8).lowercased())"
-        tasks.insert(Task(id: id, request: request), at: 0)
+        var task = Task(id: id, request: request)
+        task.readyAt = readyAt ?? task.startedAt
+        task.queueMilliseconds = max(0, Int(task.startedAt.timeIntervalSince(task.readyAt) * 1000))
+        tasks.insert(task, at: 0)
         if tasks.count > 20 { tasks.removeLast(tasks.count - 20) }
         await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.started",
                                          subjectID: id, causationID: causation?.uuidString.lowercased(),
                                          payload: ["task_id": id, "request_chars": "\(request.count)"]))
+        let contextStart = Date()
         var context = await sceneContext(bus: bus, excluding: turnID)
+        update(id) { $0.contextMilliseconds = Int(Date().timeIntervalSince(contextStart) * 1000) }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
         let result = await loop.run(request: request, context: context) { [weak self] event in
             guard let self else { return }
@@ -132,6 +150,8 @@ public final class CoreAgent {
                                                    "steps": "\(result.steps)", "tool_calls": "\(result.toolCalls.count)",
                                                    "first_token_ms": result.firstTokenMilliseconds.map(String.init) ?? "",
                                                    "total_ms": "\(result.totalMilliseconds)",
+                                                   "queue_ms": "\(tasks.first(where: { $0.id == id })?.queueMilliseconds ?? 0)",
+                                                   "context_ms": "\(tasks.first(where: { $0.id == id })?.contextMilliseconds ?? 0)",
                                                    "prompt_tokens": "\(result.usage.promptTokens)",
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))

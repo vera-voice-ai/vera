@@ -79,6 +79,9 @@ struct CorePanel: View {
                                 Text(task.state == .running ? "идёт…" : "\(task.toolCalls.count) инстр. · \(task.steps) запр. · \(Double(task.totalMilliseconds) / 1000, format: .number.precision(.fractionLength(1))) с")
                                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
                             }
+                            if task.state != .running || task.speechStartMilliseconds != nil {
+                                Text(stagesText(task)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.42)).padding(.leading, 16)
+                            }
                             if !task.answer.isEmpty || task.error != nil {
                                 Text(task.answer.isEmpty ? (task.error ?? "") : task.answer).lineLimit(2).truncationMode(.tail)
                                     .font(.system(size: 10)).foregroundStyle(task.state == .failed ? .red.opacity(0.8) : .white.opacity(0.6))
@@ -90,6 +93,16 @@ struct CorePanel: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    /// Where the time went, in the order it is spent: queue, scene question, first token, the rest of the model and tools, speech.
+    private func stagesText(_ task: CoreAgent.Task) -> String {
+        func sec(_ ms: Int) -> String { String(format: "%.1f", Double(ms) / 1000) }
+        var parts = ["очередь \(sec(task.queueMilliseconds))", "сцена \(sec(task.contextMilliseconds))"]
+        if let first = task.firstTokenMilliseconds { parts.append("1-й токен \(sec(first))") }
+        parts.append("модель+инстр. \(sec(task.totalMilliseconds))")
+        if let speech = task.speechStartMilliseconds { parts.append("до голоса \(sec(speech)) с от передачи") }
+        return "этапы, с: " + parts.joined(separator: " · ")
     }
 
     private func statusText(_ raw: String) -> String {
