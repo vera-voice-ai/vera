@@ -36,6 +36,16 @@ private func call(_ tool: String, _ json: String) -> ToolCall { ToolCall(id: "c1
     #expect((try? String(contentsOf: outside, encoding: .utf8)) == "outside")
 }
 
+@Test func aMissingFileSaysSoAndSuggestsTheRealName() {
+    let registry = WorkspaceTools(root: sandbox(["status.txt": "статус: draft\n", "notes.txt": "x\n"])).registry
+    let missing = registry.run(call("read_file", #"{"path":"status"}"#))
+    #expect(!missing.ok)
+    #expect(missing.text.contains("no file named status"))
+    #expect(missing.text.contains("status.txt"))
+    #expect(!missing.text.contains("as text"))
+    #expect(!registry.run(call("read_file", #"{"path":"zzz"}"#)).text.contains("did you mean"))
+}
+
 @Test func replaceNeedsAUniqueMatchUnlessToldOtherwise() throws {
     let root = sandbox(["a.txt": "один два один\n"])
     defer { try? FileManager.default.removeItem(at: root) }

@@ -46,6 +46,14 @@ public struct WorkspaceTools: Sendable {
         return candidate
     }
 
+    /// Names in the folder that a missing path probably meant: the same name with an extension added ("status" → "status.txt").
+    func suggestions(for path: String) -> String {
+        let wanted = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty, let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return "" }
+        let close = names.filter { $0.hasPrefix(wanted + ".") || $0.hasPrefix(wanted) && wanted.count >= 3 }.sorted().prefix(5)
+        return close.isEmpty ? "" : " (did you mean: \(close.joined(separator: ", "))?)"
+    }
+
     static func arguments(_ json: String) -> [String: Any]? {
         guard let data = json.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         return object
@@ -63,6 +71,9 @@ struct ReadFileTool: AgentTool {
     func run(argumentsJSON: String) -> ToolResult {
         guard let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String else { return ToolResult(ok: false, text: "bad arguments: need path") }
         guard let url = box.resolve(path) else { return WorkspaceTools.outside }
+        if !FileManager.default.fileExists(atPath: url.path) {
+            return ToolResult(ok: false, text: "no file named \(path)" + box.suggestions(for: path))
+        }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return ToolResult(ok: false, text: "cannot read \(path) as text") }
         if text.count > box.maxReadCharacters { return ToolResult(ok: true, text: String(text.prefix(box.maxReadCharacters)) + "\n[truncated]") }
         return ToolResult(ok: true, text: text)
