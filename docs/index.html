@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10120f">
+  <meta name="description" content="Единая документация архитектуры Vera 2: слух, сцена, внимание, события и воспроизводимые эксперименты.">
+  <title>Vera 2 — архитектура</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+  <style>
+    :root{color-scheme:dark;--bg:#10120f;--panel:#151814;--raised:#1b1f19;--line:#292e27;--text:#e7e9e2;--muted:#9da496;--subtle:#697163;--acid:#b5df72;--acid-dim:#29351e;--blue:#9dbad0;--content:850px}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scrollbar-color:#41473d var(--bg)}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--acid);text-decoration:none}a:hover{color:#d1f39b}button,input{font:inherit}
+    .topbar{position:sticky;z-index:5;top:0;height:62px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);background:#10120ff2;backdrop-filter:blur(14px)}.brand{display:flex;align-items:center;gap:10px;color:var(--text);font-size:13px;font-weight:800;letter-spacing:.13em}.brand-mark{display:grid;width:28px;height:28px;place-items:center;border:1px solid var(--acid);border-radius:8px;color:var(--acid);font-size:15px}.brand small{color:var(--muted);font-weight:500}.top-label,.kicker,.side-label,.sidebar-foot,.meta{font:10px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}.top-label{color:var(--subtle)}
+    .layout{display:grid;grid-template-columns:252px minmax(0,1fr) 190px;min-height:calc(100vh - 62px)}.sidebar{position:sticky;top:62px;align-self:start;display:flex;flex-direction:column;height:calc(100vh - 62px);padding:27px 16px 15px;border-right:1px solid var(--line)}.side-label{padding:0 11px;color:var(--subtle);font-size:9px}.project{display:flex;align-items:center;gap:9px;padding:14px 11px 24px;color:#c6cbbf;font:11px ui-monospace,monospace}.dot{width:7px;height:7px;flex:none;border-radius:50%;background:var(--acid);box-shadow:0 0 10px #b5df7250}.searchbox{display:flex;align-items:center;gap:8px;height:36px;padding:0 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted)}.searchbox input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font-size:11px}.searchbox input::placeholder{color:var(--subtle)}kbd{padding:1px 5px;border:1px solid var(--line);border-radius:3px;color:var(--subtle);font:10px ui-monospace,monospace}.nav-label{margin:29px 0 9px}.nav{display:grid;gap:3px}.nav a,.nav summary{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:5px;color:#9ca294;font-size:11px;line-height:1.4;cursor:pointer}.nav a:hover,.nav summary:hover{background:var(--panel);color:var(--text)}.nav a.active,.nav summary.active{background:var(--acid-dim);color:var(--acid)}.nav .num{width:18px;flex:none;color:#778071;font:10px ui-monospace,monospace}.nav a.active .num,.nav summary.active .num{color:var(--acid)}.nav-group summary{list-style:none}.nav-group summary::-webkit-details-marker{display:none}.nav-group summary:after{margin-left:auto;color:var(--subtle);content:"⌄";font-size:12px}.nav-group:not([open]) summary:after{content:"›"}.nav-group summary a{padding:0;color:inherit}.nav-children{display:grid;gap:2px;margin:1px 0 6px 18px;padding-left:9px;border-left:1px solid var(--line)}.nav-children a{padding:7px 8px;font-size:10px}.nav-section-label{margin:24px 0 8px}.sidebar-foot{display:flex;align-items:center;gap:9px;margin-top:auto;padding:15px 10px 5px;border-top:1px solid var(--line);color:var(--subtle);font-size:9px;letter-spacing:.03em}
+    main{width:min(100%,var(--content));min-width:0;margin:auto;padding:52px 55px 100px}.crumb{margin-bottom:19px;color:var(--subtle);font:10px ui-monospace,monospace}.kicker{display:flex;align-items:center;gap:9px;margin-bottom:13px;color:var(--acid);text-transform:uppercase}.kicker:before{width:16px;height:1px;background:var(--acid);content:""}h1,h2,h3{color:#f0f1eb;line-height:1.28;scroll-margin-top:84px}h1{margin:0 0 16px;font-size:clamp(30px,4vw,42px);font-weight:650;letter-spacing:-.04em}h2{margin:54px 0 16px;padding-bottom:11px;border-bottom:1px solid var(--line);font-size:22px;font-weight:620;letter-spacing:-.025em}h3{margin:34px 0 12px;font-size:17px;font-weight:620}p{margin:13px 0;color:#b6bcb0}strong{color:var(--text)}ul,ol{padding-left:23px;color:#b6bcb0}li{padding:3px 0}li::marker{color:var(--acid)}code{padding:2px 5px;border:1px solid #30362d;border-radius:4px;background:var(--panel);color:#c8dc9e;font:12px ui-monospace,monospace}pre{overflow:auto;margin:18px 0;padding:17px 19px;border:1px solid var(--line);border-radius:7px;background:#131612;color:#cbd1c4;font:12px/1.7 ui-monospace,monospace}pre code{padding:0;border:0;background:none;color:inherit}.table-wrap{overflow-x:auto;margin:20px 0}table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.55}th,td{padding:10px 11px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:#1a1e18;color:#dce1d5;font-weight:600}td{color:#aeb5a7}tr:nth-child(even) td{background:#141713}.callout{margin:20px 0;padding:13px 16px;border:1px solid #414c34;border-left:3px solid var(--acid);border-radius:5px;background:#171c14;color:#bbc4ae}.callout strong{color:var(--acid)}.chips{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 25px}.chip{padding:4px 9px;border:1px solid var(--line);border-radius:20px;color:var(--muted);font:9px ui-monospace,monospace}.diagram{overflow:auto;margin:20px 0;padding:19px 14px;border:1px solid var(--line);border-radius:8px;background:#121510;text-align:center}.diagram svg{max-width:100%;height:auto}.architecture-image{margin:22px 0 26px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#0b0d09}.architecture-image img{display:block;width:100%;height:auto;border-radius:4px}.architecture-image figcaption{padding:8px 5px 1px;color:var(--subtle);font:9px ui-monospace,monospace}.signal-dot{display:inline-block;width:9px;height:9px;margin-right:6px;border-radius:50%;vertical-align:middle}.adr-record{margin:9px 0;border:1px solid var(--line);border-radius:6px;background:#141713}.adr-record summary{display:flex;align-items:center;gap:12px;padding:11px 13px;color:#dce1d5;font-size:12px;font-weight:600;cursor:pointer;list-style:none}.adr-record summary::-webkit-details-marker{display:none}.adr-record summary:after{margin-left:auto;color:var(--subtle);content:"+"}.adr-record[open] summary:after{content:"−"}.adr-record>div{padding:0 14px 11px;border-top:1px solid var(--line)}.adr-record p{font-size:12px}.adr-status{padding:2px 7px;border:1px solid #414c34;border-radius:10px;color:var(--acid);font:9px ui-monospace,monospace;font-weight:400}.diagram-error{padding:14px;color:#e6c27a;text-align:left;font:12px ui-monospace,monospace;white-space:pre-wrap}.toc{position:sticky;top:62px;align-self:start;max-height:calc(100vh - 62px);overflow:auto;padding:53px 15px 20px;border-left:1px solid var(--line)}.toc-title{margin-bottom:13px;color:var(--subtle);font:9px ui-monospace,monospace;letter-spacing:.08em}.toc a{display:block;margin:2px 0;padding:5px 0 5px 10px;border-left:1px solid transparent;color:#778071;font-size:10px;line-height:1.45}.toc a:hover,.toc a.active{border-left-color:var(--acid);color:var(--acid)}.toc a.sub{padding-left:19px}.search-results{position:fixed;z-index:8;top:55px;left:16px;width:360px;max-height:70vh;overflow:auto;padding:8px;border:1px solid #394033;border-radius:8px;background:#191d17;box-shadow:0 16px 50px #0009}.result{display:block;padding:9px 10px;border-radius:5px;color:var(--text)}.result:hover{background:var(--acid-dim)}.result b,.result small{display:block}.result b{font-size:11px}.result small{margin-top:4px;color:var(--muted);font-size:10px}.foot{margin-top:60px;padding-top:16px;border-top:1px solid var(--line);color:var(--subtle);font:9px ui-monospace,monospace}.source-list{font-size:12px}.source-list li{padding:5px 0}.source-list a{overflow-wrap:anywhere}.hidden{display:none!important}
+    @media(max-width:1100px){.layout{grid-template-columns:225px minmax(0,1fr)}.toc{display:none}main{padding-right:40px;padding-left:40px}}@media(max-width:680px){.topbar{height:54px;padding:0 15px}.top-label{display:none}.layout{display:block}.sidebar{position:sticky;z-index:4;top:54px;height:auto;padding:8px 10px;border-right:0;border-bottom:1px solid var(--line);background:var(--bg)}.side-label,.project,.searchbox,.sidebar-foot{display:none}.nav-label{display:none}.nav{display:flex;overflow:auto;gap:4px;scrollbar-width:none}.nav a{flex:none;gap:6px;padding:7px 8px;font-size:10px;white-space:nowrap}.nav .num{width:auto}main{padding:31px 20px 70px}h1{font-size:30px}h2{margin-top:42px;font-size:20px}.search-results{left:8px;width:calc(100vw - 16px)}}
+    @media print{.topbar,.sidebar,.toc,.search-results{display:none!important}.layout{display:block}main{width:100%;padding:0;background:#fff;color:#111}body{background:#fff;color:#111}h1,h2,h3,p,li,td,th{color:#111}.diagram{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="#top"><span class="brand-mark">V</span><span>VERA <small>/ 2.0</small></span></a><span class="top-label">ЕДИНАЯ АРХИТЕКТУРНАЯ ДОКУМЕНТАЦИЯ</span><span class="meta">NOV 2026 · DESIGN 0.3</span></header>
+<div class="layout" id="top">
+  <aside class="sidebar" aria-label="Навигация">
+    <div class="side-label">ПРОЕКТ</div><div class="project"><span class="dot"></span> Vera 2 · архитектура</div>
+    <label class="searchbox"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Найти в документации" autocomplete="off"><kbd>/</kbd></label>
+    <div class="side-label nav-label">РАЗДЕЛЫ</div>
+    <nav class="nav" id="nav">
+      <a href="#vera"><span class="num">01</span> Вера</a>
+      <details class="nav-group" open>
+        <summary><span class="num">02</span><a href="#architecture">Архитектура</a></summary>
+        <div class="nav-children">
+          <a href="#sensors"><span class="num">·</span> Сенсоры</a>
+          <a href="#scene-map"><span class="num">·</span> Сцена</a>
+          <a href="#core-map"><span class="num">·</span> Ядро</a>
+          <a href="#response"><span class="num">·</span> Ответ / Действие</a>
+          <a href="#event-bus"><span class="num">·</span> Event Bus</a>
+        </div>
+      </details>
+      <a href="#adr"><span class="num">03</span> Журнал архитектурных решений</a>
+    </nav>
+    <div class="side-label nav-section-label">ПРОРАБОТКА</div>
+    <nav class="nav" aria-label="Дополнительные материалы">
+      <details class="nav-group">
+        <summary><span class="num">+</span> Материалы и эксперименты</summary>
+        <div class="nav-children">
+          <a href="#system-detail">Общая карта системы</a>
+          <a href="#audio">Audio Perception и модели</a>
+          <a href="#scene-detail">Scene Interpreter / Builder</a>
+          <a href="#core-detail">Внимание и рефлексы</a>
+          <a href="#response-detail">Выходные каналы</a>
+          <a href="#event-bus-detail">Каталог событий</a>
+          <a href="#replay">Record и Replay</a>
+          <a href="#voice-turn">Голосовой ход</a>
+          <a href="#experiments">План экспериментов</a>
+          <a href="#decisions">Открытые решения</a>
+        </div>
+      </details>
+    </nav>
+    <div class="sidebar-foot"><span class="dot"></span> Единый источник · docs/index.html</div>
+  </aside>
+
+  <main id="content">
+    <div class="crumb">VERA 2 <span> / </span> ДОКУМЕНТАЦИЯ</div><div class="kicker">Краткое описание</div>
+    <h1 id="vera">Вера</h1>
+    <p>Вера — личный АИ помощник Алексея, который запускается локально на макбуке, использует локальные инструменты и LLM от провайдера.</p>
+
+    <h2 id="architecture">Архитектура</h2>
+    <p>Внутри системы выделены сенсоры, сцена, ядро, ответ и действие, а также общая событийная шина. Storage / Memory хранит журнал, состояние, память и медиа отдельно от шины.</p>
+    <figure class="architecture-image"><img src="assets/vera-architecture.png" alt="Схема архитектуры Веры: сенсоры, сцена, ядро, ответ и действие связаны через Vera Signal Bus; Storage / Memory вынесено отдельно от шины."><figcaption>Архитектура Веры · схема проекта</figcaption></figure>
+    <div class="callout"><strong>Обмен через шину — преимущественно асинхронный.</strong> Сырой звук и видео не идут через Event Bus. Команда на действие и подтверждённый результат — разные сообщения.</div>
+    <div class="callout"><strong>Требование пользователя · локальные профили и навыки.</strong> Голосовые профили и образцы хранятся вне репозитория в <code>~/Library/Application Support/VeraSensorPrototype/Users/</code>: <code>people.sqlite</code> — источник истины для профилей и CAMP++ 192D embeddings; метаданные образцов также хранятся в базе, WAV — в <code>voice-samples/</code>. Целевой WAV Алексея для Nomo-PVAD и VoxLock находится в <code>voice-samples/alex/enrollment/target-voice-5.wav</code>. Связь образца с профилем сохраняется на уровне профиля; связь конкретного WAV с отдельным индексом embedding не предполагается. Каталог и подкаталоги закрыты правами <code>0700</code>, база и аудиофайлы — <code>0600</code>. <code>speaker-references.json</code> читается как legacy-источник и идемпотентно импортируется в базу; рабочие сравнения загружают профили из SQLite. Вера не поставляется со встроенными навыками: <code>~/Library/Application Support/VeraSensorPrototype/Skills/</code> создан как пустая основа, навыки появляются только при добавлении пользователем.</div>
+
+    <h3 id="sensors">Сенсоры</h3>
+    <p>Получают сигналы из аудио, видео, текста/UI, системных источников и внутренних процессов Веры. Публикуют наблюдения и предварительные гипотезы; не решают за ядро, что важно и как действовать.</p>
+    <h3 id="scene-map">Сцена</h3>
+    <p>Scene Builder связывает наблюдения. Scene State хранит текущую картину происходящего. Interpreter предлагает вероятные трактовки. Неопределённость и источник данных остаются видимыми.</p>
+    <h3 id="core-map">Ядро</h3>
+    <p>Рефлексы обрабатывают срочные ограниченные реакции; внимание выбирает фокус; мышление и планирование интерпретируют ситуацию, цели и варианты действий.</p>
+    <h3 id="response">Ответ / Действие</h3>
+    <p>Голос, UI, текстовые каналы и инструменты исполняют команды и сообщают фактический результат: начато, завершено, отменено или завершилось ошибкой.</p>
+    <h3 id="event-bus">Event Bus</h3>
+    <p>Передаёт observations, events, hypotheses и commands между независимыми частями. Шина не владеет сценой, памятью или смыслом решения.</p>
+
+    <h2 id="adr">03 · Журнал архитектурных решений</h2>
+    <p><b>Vera Signal Protocol 0.1.</b> Kind — общий признак формы взаимодействия в протоколе шины. Все четыре решения зафиксированы как принятые. Ссылки в колонке «Положение» ведут к их описаниям.</p>
+    <div class="table-wrap"><table><thead><tr><th>№</th><th>Решение</th><th>Статус</th><th>Положение</th></tr></thead><tbody>
+      <tr><td>1</td><td><b>Четыре основных модуля.</b> Sensors получает сигналы, Scene формирует картину происходящего, Core принимает решения, Response исполняет действия.</td><td>Принято</td><td><a href="#adr-001">Подробнее ↗</a></td></tr>
+      <tr><td>2</td><td><b>Четыре вида сообщений.</b> Event сообщает о произошедшем, Command запрашивает действие, Query запрашивает информацию, Reply возвращает ответ.</td><td>Принято</td><td><a href="#adr-002">Подробнее ↗</a></td></tr>
+      <tr><td>3</td><td><b>Две оси классификации.</b> Kind определяет способ взаимодействия, Domain — модуль-владелец сообщения.</td><td>Принято</td><td><a href="#adr-003">Подробнее ↗</a></td></tr>
+      <tr><td>4</td><td><b>Полномочия модулей.</b> Межмодульные команды отправляет Core; все модули могут обмениваться событиями и запросами в пределах прав.</td><td>Принято</td><td><a href="#adr-004">Подробнее ↗</a></td></tr>
+    </tbody></table></div>
+
+    <h3 id="adr-001">ADR-001 · Четыре основных модуля</h3>
+    <div class="table-wrap"><table><thead><tr><th>Модуль</th><th>Цвет</th><th>Ответственность</th></tr></thead><tbody>
+      <tr><td><code>sensors</code></td><td><span class="signal-dot" style="background:#38BDF8"></span>Голубой · <code>#38BDF8</code></td><td>Внешние сигналы, внутренняя телеметрия, наблюдения</td></tr>
+      <tr><td><code>scene</code></td><td><span class="signal-dot" style="background:#A78BFA"></span>Фиолетовый · <code>#A78BFA</code></td><td>Интерпретация сигналов, актуальная модель происходящего</td></tr>
+      <tr><td><code>core</code></td><td><span class="signal-dot" style="background:#FACC15"></span>Жёлтый · <code>#FACC15</code></td><td>Рефлексы, внимание, мышление, принятие решений</td></tr>
+      <tr><td><code>response</code></td><td><span class="signal-dot" style="background:#4ADE80"></span>Зелёный · <code>#4ADE80</code></td><td>Голос, UI, инструменты, исполнение действий и обратная связь</td></tr>
+    </tbody></table></div>
+    <p>Каждый модуль и Signal Bus запускаются отдельным процессом. Главная точка входа Веры запускает и контролирует процессы в составе одного приложения. Модули взаимодействуют через Bus; сбой или перезапуск одного модуля не должен требовать перезапуска остальных.</p>
+
+    <h3 id="adr-002">ADR-002 · Четыре вида сообщений (Kind)</h3>
+    <p>Kind — общий протокольный дискриминатор для маршрутизации и наблюдения за обменом. Он не означает, что все сообщения имеют одинаковую семантику или должны обрабатываться одним способом. В модели Веры используются четыре формы:</p>
+    <div class="table-wrap"><table><thead><tr><th>Kind</th><th>Назначение</th><th>Механизм</th></tr></thead><tbody>
+      <tr><td><code>event</code></td><td>Сообщение о произошедшем или обнаруженном</td><td>Pub/Sub</td></tr>
+      <tr><td><code>command</code></td><td>Запрос на выполнение действия</td><td>Адресованная доставка</td></tr>
+      <tr><td><code>query</code></td><td>Запрос информации</td><td>Request</td></tr>
+      <tr><td><code>reply</code></td><td>Ответ на конкретный Query</td><td>Возврат инициатору запроса</td></tr>
+    </tbody></table></div>
+    <p><code>Reply</code> используется для ответа на <code>Query</code>. Он не подтверждает приём или выполнение <code>Command</code>. Команда не гарантирует выполнение; исполнитель сообщает о фактическом результате отдельным <code>Event</code> в своём Domain. Так сохраняется разделение: Query/Reply читают данные, Command просит выполнить действие, Event сообщает о факте.</p>
+
+    <h3 id="adr-003">ADR-003 · Две оси классификации сообщений</h3>
+    <ul><li><b>Kind</b> — характер взаимодействия: <code>event</code>, <code>command</code>, <code>query</code>, <code>reply</code>.</li><li><b>Domain</b> — модуль-владелец сообщения: <code>sensors</code>, <code>scene</code>, <code>core</code>, <code>response</code>.</li></ul>
+    <div class="table-wrap"><table><thead><tr><th>Поле</th><th>Назначение</th></tr></thead><tbody>
+      <tr><td><code>domain</code></td><td>Модуль-владелец сообщения; определяет область ответственности и может участвовать в проверке права публикации</td></tr>
+      <tr><td><code>source</code></td><td>Конкретный отправитель</td></tr>
+      <tr><td><code>target</code></td><td>Адресат, если требуется</td></tr>
+      <tr><td><code>type</code></td><td>Конкретный тип сообщения</td></tr>
+      <tr><td><code>payload</code></td><td>Данные сообщения</td></tr>
+    </tbody></table></div>
+    <p>При визуализации цвет сигнала берётся из его Domain. Цвет обозначает модуль-владелец, а не Kind; цвет не влияет на маршрутизацию. Kind — форма сообщения общего конверта, Domain — ответственность за его содержание.</p>
+
+    <h3 id="adr-004">ADR-004 · Полномочия модулей</h3>
+    <div class="table-wrap"><table><thead><tr><th>Модуль</th><th>Event</th><th>Command</th><th>Query</th><th>Reply</th></tr></thead><tbody>
+      <tr><td>Sensors</td><td>Да</td><td>Нет</td><td>Да</td><td>Да</td></tr>
+      <tr><td>Scene</td><td>Да</td><td>Нет</td><td>Да</td><td>Да</td></tr>
+      <tr><td>Core</td><td>Да</td><td>Да</td><td>Да</td><td>Да</td></tr>
+      <tr><td>Response</td><td>Да</td><td>Нет</td><td>Да</td><td>Да</td></tr>
+    </tbody></table></div>
+    <p><b>Межмодульные команды инициирует только Core.</b> Все модули могут публиковать события, запрашивать информацию и отвечать на адресованные запросы в пределах назначенных полномочий. Права на конкретные типы сообщений определяются отдельно.</p>
+
+    <h2 id="additional">Дополнительная проработка</h2>
+    <p>Ниже сохранены прежние материалы для истории. Текущим контрактом являются ADR-001–004 выше.</p>
+    <details class="adr-record"><summary>Архив: предыдущие версии Signal Protocol и черновики (заменены ADR-001–004)</summary><div>
+    <p><b>Неактуально для реализации:</b> категории событий, цвета по Kind, прежние матрицы полномочий и черновые ADR ниже сохранены только для истории. Использовать следует принятые ADR-001–004.</p>
+    <h3>Ось 1 · Kind — способ взаимодействия</h3>
+    <div class="table-wrap"><table><thead><tr><th>Kind</th><th>Значение</th><th>Механизм</th><th>Цвет</th></tr></thead><tbody>
+      <tr><td><code>event</code></td><td>Что-то обнаружено, изменилось, выбрано или произошло</td><td>Pub/Sub</td><td><span class="signal-dot" style="background:#61c8f2"></span>Голубой</td></tr>
+      <tr><td><code>command</code></td><td>Требуется выполнить действие</td><td>Адресованная доставка; результат приходит отдельным event</td><td><span class="signal-dot" style="background:#f1a94f"></span>Оранжевый</td></tr>
+      <tr><td><code>query</code></td><td>Требуется получить информацию</td><td>Request/Reply; запрос не публикуется всем подписчикам</td><td><span class="signal-dot" style="background:#92979e"></span>Нейтральный серый</td></tr>
+      <tr><td><code>reply</code></td><td>Ответ на конкретный query</td><td>Возврат инициатору, связан с исходным запросом</td><td><span class="signal-dot" style="background:#63d7c7"></span>Бирюзовый</td></tr>
+    </tbody></table></div>
+    <h3>Ось 2 · Category — смысл события</h3>
+    <p>Поле `category` используется только при `kind=event`. Команды, запросы и ответы не получают category.</p>
+    <div class="table-wrap"><table><thead><tr><th>Category</th><th>Значение</th><th>Типичный маршрут</th></tr></thead><tbody>
+      <tr><td><code>observation</code> · наблюдение</td><td>Компонент непосредственно заметил сигнал</td><td>Sensors → Bus → Scene, Core/Reflex</td></tr>
+      <tr><td><code>hypothesis</code> · гипотеза</td><td>Предварительная трактовка, которую можно уточнить или отозвать</td><td>Sensor analyzer / Scene Interpreter → Bus → Scene Builder</td></tr>
+      <tr><td><code>scene_update</code> · обновление сцены</td><td>Как изменилось представление о ситуации</td><td>Scene Builder → Bus → Core, Attention, UI, Storage</td></tr>
+      <tr><td><code>decision</code> · решение</td><td>Какое поведение выбрано</td><td>Core / Reflex → Bus → trace, Scene</td></tr>
+      <tr><td><code>execution</code> · исполнение</td><td>Что реально происходит с выполнением действия</td><td>Response/Action → Bus → Scene, Core, Storage</td></tr>
+    </tbody></table></div>
+    <p>Цвет определяется только `kind`: категории событий не меняют голубой цвет `event`. Палитра служит визуализации и не влияет на маршрутизацию; контракт остаётся понятным по `kind`, `category`, `name`, `source` и `target` без цвета.</p>
+    <h3>Пример · пользователь перебивает Веру</h3>
+    <ol><li><code>event / observation / speech.started</code> — сенсор обнаружил речь.</li><li><code>event / hypothesis / user.interrupting</code> — возможно, человек перебивает Веру.</li><li><code>event / scene_update / scene.updated</code> — сцена обновила представление о диалоге.</li><li><code>event / decision / core.decision.made</code> — ядро выбрало приостановить озвучивание.</li><li><code>command / tts.pause</code> — адресованная команда исполнителю TTS.</li><li><code>event / execution / tts.paused</code> — исполнитель сообщил фактический результат.</li></ol>
+    <p>Это возможная последовательность, не обязательный конвейер. Рефлекс может отправить `tts.pause` сразу после `speech.started`, не ожидая гипотезу и обновление сцены.</p>
+    <h3>Модули и виды взаимодействия · рабочая матрица</h3>
+    <p>«Отправлять» означает публиковать `event` или инициировать `command/query`; `reply` отправляет владелец запрошенных данных только инициатору. «Получать» означает подписываться на события или быть адресатом команды/query/reply. Матрица описывает роль модулей, не механизм авторизации.</p>
+    <div class="table-wrap"><table><thead><tr><th>Модуль</th><th>Может отправлять / публиковать</th><th>Может получать / обрабатывать</th></tr></thead><tbody>
+      <tr><td><b>Sensors</b></td><td><code>event</code> (свои наблюдения/статус); <code>query</code>; <code>reply</code> на запрос о своём состоянии</td><td><code>event</code>; адресованный ему <code>command</code>; <code>query</code> о данных сенсора; <code>reply</code> на свой запрос</td></tr>
+      <tr><td><b>Scene</b></td><td><code>event</code> (hypothesis, scene_update); <code>query</code>; <code>reply</code> на запрос о Scene State</td><td><code>event</code>; адресованный Scene <code>command</code>; <code>query</code> о состоянии; <code>reply</code> на свой запрос</td></tr>
+      <tr><td><b>Core / Reflex</b></td><td><code>event</code> (decision); <code>command</code>; <code>query</code>; <code>reply</code> о принадлежащем Core состоянии</td><td><code>event</code>; адресованный Core <code>command</code>; <code>query</code> о состоянии Core; <code>reply</code> на свой запрос</td></tr>
+      <tr><td><b>Response/Action</b></td><td><code>event</code> (execution); <code>query</code>; <code>reply</code> о состоянии эффектора</td><td><code>event</code>; адресованный ему <code>command</code>; <code>query</code> о состоянии эффектора; <code>reply</code> на свой запрос</td></tr>
+      <tr><td><b>Storage/Memory</b></td><td><code>reply</code> на запрос чтения; технический <code>event</code> о собственном состоянии</td><td>Выбранные для сохранения <code>event</code>; адресованный <code>query</code>; <code>reply</code> на собственный запрос</td></tr>
+      <tr><td><b>Event Bus</b></td><td>Не публикует доменные <code>event</code>, <code>command</code>, <code>query</code> или <code>reply</code> от своего имени</td><td>Принимает все четыре kind для маршрутизации: pub/sub для event, адресная доставка для command, request/reply для query/reply</td></tr>
+    </tbody></table></div>
+    <div class="callout"><strong>Граница в рабочей матрице:</strong> `command` может отправлять Core или ограниченный Reflex. Остальные модули получают его только если указаны адресатом. `query` обрабатывает владелец состояния, а `reply` возвращается отправителю запроса.</div>
+    <details class="adr-record"><summary>Предыдущие записи ADR-001–008 — черновики, не согласованы <span class="adr-status">Не приняты</span></summary><div>
+    <details class="adr-record"><summary>ADR-001 · Границы основных подсистем <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Линейный конвейер связывает аудиоввод, модель и ответ слишком тесно и затрудняет независимую проверку частей.</p><p><b>Решение.</b> Разделить Веру на сенсоры, сцену, ядро, ответ/действие и Event Bus. Storage / Memory — общая инфраструктура, не часть ядра.</p><p><b>Последствия.</b> Части публикуют наблюдения, гипотезы, команды и результаты через явные контракты. Первую реализацию допустимо оставить в одном процессе.</p></div></details>
+    <details class="adr-record"><summary>ADR-002 · Signal Bus, data plane и Storage <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Сырые аудио/видео высокочастотны, а журнал и актуальное состояние имеют другие требования, чем маршрутизация сигналов.</p><p><b>Решение.</b> Шина переносит observations, events, hypotheses и commands; raw audio/video идут отдельным data plane. Event Log, State Store, Memory и Media Store остаются отдельными логическими слоями.</p><p><b>Последствия.</b> События ссылаются на медиа по ID/диапазону. Сохранение выбирается по политике; шина не обязана быть долговечной базой.</p></div></details>
+    <details class="adr-record"><summary>ADR-003 · Разделить слух, восприятие и внимание <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Захват звука, распознавание содержания и выбор важного — разные задачи с разной скоростью и надёжностью.</p><p><b>Решение.</b> Слух извлекает акустические признаки; восприятие связывает их в гипотезы и сцену; внимание назначает фокус/приоритет.</p><p><b>Последствия.</b> Ни транскрипт, ни акустический признак сам по себе не доказывает адресацию или намерение пользователя.</p></div></details>
+    <details class="adr-record"><summary>ADR-004 · Scene Interpreter и Scene Builder <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Смысловая интерпретация может быть вероятностной, пересматриваться и поступать от нескольких моделей с разной задержкой.</p><p><b>Решение.</b> Interpreter выдаёт гипотезы с evidence refs; Builder — единственный владелец обновления Scene State и согласует поздние/конфликтующие результаты.</p><p><b>Последствия.</b> Модель не мутирует сцену напрямую; UI и ядро читают одну ревизируемую модель состояния.</p></div></details>
+    <details class="adr-record"><summary>ADR-005 · Быстрый локальный путь рефлексов <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Остановка TTS при явном перебивании не может ждать полного ASR, сцены или LLM.</p><p><b>Решение.</b> Узкие обратимые рефлексы получают ранние события и могут отправить локальную команду эффектору напрямую; публикация результата в шину идёт параллельно.</p><p><b>Последствия.</b> Нужны ограниченные полномочия, дедлайн, защита от устаревших ходов и подтверждение фактической паузы.</p></div></details>
+    <details class="adr-record"><summary>ADR-006 · Record и Replay как архитектурная возможность <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Проверка одного рефлекса не должна требовать запускать весь организм и реальные устройства.</p><p><b>Решение.</b> Ввести режимы LIVE, RECORD и REPLAY; поддержать replay готовых событий для потребителей и audio replay для сенсорного анализа.</p><p><b>Последствия.</b> Повторяемость требует virtual clock, фиксированного порядка, изолированного состояния и записанных/подменённых ответов недетерминированных моделей. Event Bus сам по себе детерминизм не гарантирует.</p></div></details>
+    <details class="adr-record"><summary>ADR-007 · Jev-style в Scene Interpreter <span class="adr-status">Черновик · эксперимент</span></summary><div><p><b>Контекст.</b> Jev-Style-2B-Decision не принимает аудио как аудиомодель; его потенциальный вход — уже извлечённый текст/JSON evidence.</p><p><b>Решение.</b> Проверить Jev-style как одного из сменных интерпретаторов, который выбирает между явно заданными вариантами. Не назначать его единственным источником трактовки и не считать score калиброванной вероятностью без измерений.</p><p><b>Последствия.</b> Сравнить с rule baseline и другими моделями на размеченных русскоязычных эпизодах, включая фоновые беседы и неоднозначные реплики.</p></div></details>
+    <details class="adr-record"><summary>ADR-008 · Текущий продуктовый контекст Веры <span class="adr-status">Черновик</span></summary><div><p><b>Контекст.</b> Vera 2 — личный помощник Алексея.</p><p><b>Решение.</b> Текущий целевой запуск — локально на MacBook, с локальными инструментами и LLM от провайдера.</p><p><b>Последствия.</b> Архитектура сохраняет локальную сенсорную обработку и заменяемость провайдеров; это не фиксирует конкретную модель или транспорт.</p></div></details>
+
+    </div></details>
+
+    </div></details>
+
+    <h2 id="system-detail">Материал: общая карта системы</h2>
+    <div class="table-wrap"><table><thead><tr><th>Контур</th><th>Вопрос</th><th>Выход</th><th>Не владеет</th></tr></thead><tbody>
+      <tr><td><b>Сенсоры</b></td><td>Что наблюдается?</td><td>Звук, текст, видео, системные и внутренние наблюдения</td><td>Глобальными решениями</td></tr>
+      <tr><td><b>Сцена</b></td><td>Что вероятнее всего происходит?</td><td>Участники, связи, содержание, временная модель и неопределённость</td><td>Выбором цели и действия</td></tr>
+      <tr><td><b>Ядро</b></td><td>Что важно и что делать?</td><td>Рефлексы, приоритеты, намерения, планы и команды</td><td>Фактическим результатом внешнего исполнения</td></tr>
+      <tr><td><b>Формирование ответа</b></td><td>Как реализовать действие?</td><td>Голос, UI, сообщения, инструменты и действия</td><td>Решением, нужно ли действие</td></tr>
+      <tr><td><b>Event / Signal Bus</b></td><td>Кто должен получить сообщение?</td><td>Маршрутизация, корреляция, независимые подписчики</td><td>Решением о смысле и хранением состояния</td></tr>
+      <tr><td><b>Storage / Memory</b></td><td>Что требуется сохранить?</td><td>Event Log, State Store, Memory Store, Media Store</td><td>Обязательным синхронным посредничеством в каждом сообщении</td></tr>
+    </tbody></table></div>
+    <p>Стрелки на карте ниже обозначают логический двунаправленный обмен, а не постоянные синхронные вызовы. Критичный локальный рефлекс может использовать быстрый in-process путь и параллельно публиковать результат.</p>
+    <div class="diagram mermaid">flowchart TB
+      subgraph VERA[VERA]
+        SENSORS[Сенсоры\nзвук · текст · видео · система]
+        SCENE[Сцена]
+        BUS[Event / Signal Bus]
+        CORE[Ядро]
+        EFFECT[Формирование ответа\nголос · UI · действия]
+        SENSORS <--> BUS
+        SCENE <--> BUS
+        CORE <--> BUS
+        EFFECT <--> BUS
+        SENSORS <--> SCENE
+        SCENE <--> CORE
+        CORE <--> EFFECT
+      end
+      STORE[(Storage / Memory\nEvent Log · State · Memory · Media)]
+      BUS -. selected history .-> STORE</div>
+
+    <h3 id="response-detail">Дополнительная проработка: ответ и действие</h3>
+    <p>Формирование ответа включает не только генерацию текста, но и выходные каналы/эффекторы: голосовой синтез и воспроизведение, текстовые сообщения, UI, инструменты и внешние действия. Исполнитель принимает адресованную команду, выполняет или отклоняет её и публикует фактический результат. Повтор команды должен учитывать ID, deadline, отмену и идемпотентность.</p>
+    <div class="table-wrap"><table><thead><tr><th>Контур</th><th>Вопрос</th><th>Выход</th><th>Не владеет</th></tr></thead><tbody>
+      <tr><td><b>Слух</b><br>Audio Perception</td><td>Какой сигнал поступил?</td><td>Активность, сегменты, транскрипты, говорящие, акустические события, время и качество</td><td>Смыслом реплики, вниманием и решением отвечать</td></tr>
+      <tr><td><b>Сцена</b><br>Perception</td><td>Что вероятнее всего происходит?</td><td>Участники, реплики, отношения, текущие гипотезы и неопределённость</td><td>Глобальным приоритетом и командами исполнителям</td></tr>
+      <tr><td><b>Внимание</b><br>Attention</td><td>Что важно сейчас?</td><td>Фокус, приоритет, причина, дедлайн и запрос ресурсов</td><td>Истинностью исходных наблюдений и исполнением</td></tr>
+      <tr><td><b>Ядро</b><br>Core</td><td>Каков смысл и что делать?</td><td>Намерение, ответ, задача, план, команда</td><td>Фактическим состоянием сенсора или эффектора</td></tr>
+      <tr><td><b>Эффекторы</b><br>Response / Action</td><td>Что произошло при выполнении?</td><td>Голос, UI, текст, действие и подтверждённый результат</td><td>Выбором цели и разрешений</td></tr>
+      <tr><td><b>Event Bus</b></td><td>Кто должен узнать о сообщении?</td><td>Маршрутизация, корреляция, изоляция подписчиков, replay seam</td><td>Смыслом, долговременным состоянием или политикой</td></tr>
+      <tr><td><b>Хранилища</b></td><td>Что требуется сохранить?</td><td>Журнал, снимки состояния, память и ссылки на медиа</td><td>Обязательным синхронным участием в каждом сигнале</td></tr>
+    </tbody></table></div>
+    <p>Логические контуры могут жить в одном процессе. Асинхронные контракты не требуют заранее вводить отдельные сервисы или сетевой брокер. Сырая PCM/медиа идут по ограниченному data plane; шина переносит метаданные, наблюдения, гипотезы, события, команды и результаты.</p>
+    <div class="diagram mermaid">flowchart TB
+      subgraph VERA[Вера]
+        subgraph INPUT[Источники]
+          MIC[Микрофон / Audio I-O]
+          TXT[Текстовые каналы]
+          SYS[Системные сигналы]
+        end
+        DATA[Data plane\nPCM / media]
+        BUS[Event Bus\nobservations · hypotheses · events · commands]
+        HEAR[Слух\nAudio Perception]
+        INTERP[Scene Interpreter]
+        BUILDER[Scene Builder]
+        STATE[Scene State]
+        ATT[Внимание]
+        REF[Рефлексы]
+        CORE[Ядро / мышление]
+        OUT[Эффекторы\nголос · UI · текст · действия]
+        STORE[(Storage\nevent log · state · memory · media)]
+        MIC --> DATA --> HEAR
+        TXT --> BUS
+        SYS --> BUS
+        HEAR <--> BUS
+        BUS <--> INTERP
+        INTERP --> BUS
+        BUS <--> BUILDER
+        BUILDER --> STATE
+        STATE --> ATT --> CORE
+        BUS <--> ATT
+        BUS <--> REF
+        BUS <--> CORE
+        CORE --> BUS
+        BUS <--> OUT
+        OUT -. output reference .-> DATA
+        BUS -. selected async writes .-> STORE
+        STATE -. snapshots .-> STORE
+      end</div>
+
+    <h2 id="audio">02 · Vera Audio Perception: слух</h2>
+    <p>Аудиосигнал несёт больше, чем слова. Слух — непрерывное наблюдение за акустическим миром. Анализаторы публикуют признаки независимо, с временными границами, источником и оценкой надёжности. Никакой один анализатор не обязан «слышать всё».</p>
+    <div class="table-wrap"><table><thead><tr><th>Семейство сигнала</th><th>Примеры</th><th>Скорость / надёжность</th><th>Выходной контракт</th></tr></thead><tbody>
+      <tr><td>Акустическая активность</td><td>Энергия, onset/offset, VAD, тишина, смена режима</td><td>Миллисекунды; быстрый сигнал, не подтверждение речи</td><td>Окно времени, класс, score, analyzer ID</td></tr>
+      <tr><td>Речь и текст</td><td>ASR partial/final, язык, слова/таймкоды</td><td>Доли секунды — секунды; partial может исправляться</td><td>utterance ID, revision, сегменты и статус</td></tr>
+      <tr><td>Участники</td><td>Speaker track, diarization, сходство с профилем</td><td>Постепенно уточняется; профильная связь вероятностна</td><td>track ID, интервал, кандидат профиля, confidence</td></tr>
+      <tr><td>Манера и паралингвистика</td><td>Интенсивность, темп, паузы, эмоц. признаки, смех</td><td>Короткие окна; чувствительны к шуму и домену</td><td>Наблюдаемый признак отдельно от трактовки намерения</td></tr>
+      <tr><td>Не-речевые звуки</td><td>Стук, сигнал, музыка, лай, хлопок, шум среды</td><td>От мгновенного класса до поздней классификации</td><td>Класс-кандидат, диапазон, score, модель</td></tr>
+      <tr><td>Связь с собственным выводом</td><td>Self-voice, echo, хвост динамика, overlap</td><td>Нужен выходной reference; классификация может запаздывать</td><td>output session ID, диапазон, estimate/status</td></tr>
+    </tbody></table></div>
+    <p>Сенсор не публикует «пользователь сердится» или «обращается к Вере» как факт. Он может сообщить высокую акустическую интенсивность, трек говорящего, текст и overlap. Интерпретация принадлежит следующему слою.</p>
+
+    <h3>Модели-кандидаты — не обязательные компоненты</h3>
+    <div class="table-wrap"><table><thead><tr><th>Модель / инструмент</th><th>Подтверждённая роль</th><th>Архитектурная оговорка</th></tr></thead><tbody>
+      <tr><td>GigaAM</td><td>Семейство ASR для русского (CTC/RNNT/E2E); в том же проекте описана отдельная GigaAM-Emo модель.</td><td>Не считать emo-голову частью каждого v3 ASR checkpoint. Измерить latency и лицензирование выбранной ревизии.</td></tr>
+      <tr><td>Qwen3-ASR 0.6B / 1.7B</td><td>Многоязычный ASR включает русский и тайский; официальный проект описывает offline и streaming режимы.</td><td>Официальный streaming путь на момент проверки требует vLLM; проверить реальную задержку/ресурс на Mac отдельно.</td></tr>
+      <tr><td>SenseVoiceSmall</td><td>ASR, language ID, эмоц. и audio-event метки для опубликованного набора языков.</td><td>Официальный released checkpoint перечисляет Chinese/Cantonese/English/Japanese/Korean, без русского. Diarization — отдельная составная система.</td></tr>
+      <tr><td>Jev-Style-2B-Decision</td><td>Модель типизированных решений по переданному текстовому/JSON evidence; конкретные v4 backend отличаются.</td><td>Не аудиомодель и не ASR. MLX/GGUF варианты text-only; image input есть в PyTorch v4. Возвращаемые оценки не считать калиброванными без проверки.</td></tr>
+    </tbody></table></div>
+    <p>Модели сменные. Один аудиофрагмент можно пропустить через несколько ASR/анализаторов, сохранив результаты как разные гипотезы с provenance. Качество сравнивается на локально разрешённом наборе, а не выводится из названия модели.</p>
+
+    <h2 id="scene-detail">Подробно: сцена, наблюдение, интерпретация и состояние</h2>
+    <p>Сцена — обновляемая модель реальности, не одна нейросеть и не просто текстовый transcript. Внутри сцены нужны три разные сущности:</p>
+    <div class="table-wrap"><table><thead><tr><th>Сущность</th><th>Ответственность</th><th>Вход / выход</th></tr></thead><tbody>
+      <tr><td><b>Scene State</b></td><td>Текущий согласованный срез: кто говорит, что сказано, какие события идут параллельно, говорит ли Вера.</td><td>Содержит значения, источники, freshness, revision и неопределённость.</td></tr>
+      <tr><td><b>Scene Interpreter</b></td><td>Выдвигает семантические гипотезы: адресат, возможное намерение, отношение события к текущему диалогу.</td><td>Получает evidence из сцены; возвращает ограниченные варианты, evidence refs, модель/rule ID и оценку.</td></tr>
+      <tr><td><b>Scene Builder</b></td><td>Применяет события и интерпретации, разрешает конкурирующие обновления, выпускает новую ревизию состояния.</td><td>Единственный владелец записи Scene State; никакой интерпретатор не мутирует сцену напрямую.</td></tr>
+    </tbody></table></div>
+    <p>Интерпретаторы могут работать параллельно: правила, специализированная небольшая модель, Jev-style classifier, основная модель по запросу. Scene Builder сравнивает результат с исходными evidence и сроком их актуальности. Низкая уверенность не превращается в жёсткий факт.</p>
+    <h3>Пример: «Да хватит уже!» во время ответа Веры</h3>
+    <p>Слух публикует текст, track говорящего, высокую акустическую интенсивность и overlap с исходящим TTS. Это наблюдения. Interpreter получает структурированное состояние и оценивает заранее заданные варианты:</p>
+    <pre><code>{
+  "evidence": {
+    "speech": "Да хватит уже",
+    "speaker_track": "speaker_1",
+    "vera_is_speaking": true,
+    "speech_overlap": true,
+    "acoustic_intensity": "high",
+    "dialogue_context": "vera_explaining"
+  },
+  "question": "Как интерпретировать реплику?",
+  "options": ["addressed_to_vera", "stop_request", "addressed_to_other", "unclear"]
+}</code></pre>
+    <p>Результаты должны быть гипотезами, например: «обращено к Вере», «вероятно просит остановиться», «разговор с другим человеком», «неясно». Числовые оценки в учебном примере — условные; они не подтверждают фактическую калибровку модели.</p>
+    <p>Scene Builder обновляет, например, `interaction.interruption = likely` вместе с evidence IDs и сроком актуальности. Быстрый рефлекс мог локально приостановить TTS ещё до завершения этой интерпретации; ядро решает, как ответить и продолжать ли предыдущий ход.</p>
+    <div class="callout"><strong>Роль Jev-style.</strong> Подходящая точка эксперимента — после извлечения акустических признаков, как один из ограниченных Scene Interpreter-ов. Он ранжирует заданные варианты на структурированном состоянии; он не слышит аудио, не владеет Scene State и не должен единолично принимать решения.</div>
+
+    <h2 id="core-detail">Подробно: внимание, рефлексы и ядро</h2>
+    <h3>Внимание</h3><p>Внимание определяет, что сейчас существенно для Веры и куда выделить ресурсы. Вход — события и сцена; выход — фокус с причиной, приоритетом, сроком актуальности и запросом более дорогого анализа. Внимание может игнорировать повторяющийся фон, но не стирает его из журнала и не переписывает evidence.</p>
+    <h3>Рефлексы</h3><p>Локальные, ограниченные по последствиям реакции с ясным триггером: пауза TTS на явный stop или вероятный barge-in. Рефлекс не ждёт LLM, полной транскрипции, Event Log или Scene Builder. Он сообщает сработавшее правило, входные message IDs и фактический результат эффектора.</p>
+    <h3>Ядро</h3><p>Ядро владеет смыслом поручения, целями, более широким планом и решением о последующих действиях. Оно может работать медленно и параллельно с новыми сенсорными сигналами. Команда не равна результату: исполнитель подтверждает начало, завершение, отмену либо ошибку.</p>
+
+    <h2 id="event-bus-detail">Подробно: Event Bus и каталог сообщений</h2>
+    <p>Шина — локально заменяемый транспорт сообщений, не мозг, база и не обязательное хранилище каждого сигнала. Подписчики изолированы; тяжёлые данные остаются на data plane, а событие передаёт ссылку и временной диапазон.</p>
+    <div class="table-wrap"><table><thead><tr><th>Kind</th><th>Category</th><th>Семантика</th><th>Пример</th></tr></thead><tbody>
+      <tr><td><code>event</code></td><td>Одна из пяти категорий</td><td>Публикуемый факт: обнаружено, предположено, обновлено, выбрано или исполнено</td><td>`event / observation / audio.activity.detected`</td></tr>
+      <tr><td><code>command</code></td><td>—</td><td>Адресованная просьба выполнить действие</td><td>`command / tts.pause`</td></tr>
+      <tr><td><code>query</code></td><td>—</td><td>Запросить данные у конкретного источника/владельца состояния</td><td>`query / scene.snapshot.get`</td></tr>
+      <tr><td><code>reply</code></td><td>—</td><td>Ответ на query, возвращается инициатору и не рассылается pub/sub</td><td>`reply / scene.snapshot`</td></tr>
+    </tbody></table></div>
+    <h3>Общий envelope</h3>
+    <pre><code>schema_version: 1
+message_id: uuid
+kind: event | command | query | reply
+category: observation | hypothesis | scene_update | decision | execution  # event only
+name: audio.activity.detected
+source: sensor.audio.vad
+target: optional recipient; required for command
+created_at: wall-clock timestamp
+occurred_at: source timestamp, when known
+monotonic_time_ns: monotonic clock for durations/order
+session_id: audio/session identity
+turn_id: optional interaction turn
+subject_id: segment / hypothesis / entity
+revision: monotonic hypothesis revision
+correlation_id: workflow identity
+causation_id: preceding message ID
+query_id: ID shared by a query and its reply
+in_reply_to: original query message ID on reply
+expires_at: optional freshness deadline
+confidence: optional score for this hypothesis only
+payload: typed data</code></pre>
+    <p>Команда дополнительно несёт `command_id`, `target`, `deadline` и при необходимости idempotency key. Исполнитель сообщает подтверждения отдельным `event / execution`; correlation/causation связывают результат с командой. `accepted` означает только приём, а не успешное исполнение. Query и reply несут общий `query_id`, reply также содержит `in_reply_to`; он возвращается инициатору напрямую.</p>
+    <h3>Начальный каталог</h3>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Kind</th><th>Category</th><th>Назначение</th></tr></thead><tbody>
+      <tr><td>`audio.capture.started/stopped`</td><td>event</td><td>execution</td><td>Фактический статус захвата сенсора</td></tr>
+      <tr><td>`audio.activity.detected/ended`</td><td>event</td><td>observation</td><td>Окно акустической активности без вывода о смысле</td></tr>
+      <tr><td>`audio.echo.estimated`</td><td>event</td><td>hypothesis</td><td>Вероятная связь со своим выходным аудио</td></tr>
+      <tr><td>`speech.segment.started/ended`</td><td>event</td><td>observation</td><td>Границы участка речи</td></tr>
+      <tr><td>`speech.transcript.updated`</td><td>event</td><td>hypothesis</td><td>Текстовая ревизия utterance: partial/final/retracted</td></tr>
+      <tr><td>`speech.overlap.detected`</td><td>event</td><td>hypothesis</td><td>Пересечение речевых участков</td></tr>
+      <tr><td>`speaker.observed`</td><td>event</td><td>observation</td><td>Анонимный track и интервал</td></tr>
+      <tr><td>`speaker.identity.proposed/retracted`</td><td>event</td><td>hypothesis</td><td>Кандидат профиля, confidence и метод</td></tr>
+      <tr><td>`scene.interpretation.requested`</td><td>command</td><td>—</td><td>Запросить оценку с заданными evidence и вопросом</td></tr>
+      <tr><td>`scene.interpretation.proposed/retracted`</td><td>event</td><td>hypothesis</td><td>Ограниченная семантическая гипотеза с evidence refs</td></tr>
+      <tr><td>`scene.revision.created`</td><td>event</td><td>scene_update</td><td>Новая ревизия Scene State</td></tr>
+      <tr><td>`core.decision.made` / `reflex.triggered`</td><td>event</td><td>decision</td><td>Выбранное поведение, причина и входные IDs</td></tr>
+      <tr><td>`output.speech.requested`</td><td>command</td><td>—</td><td>Адресованное поручение выдать речь</td></tr>
+      <tr><td>`output.speech.started/paused/ended/failed`</td><td>event</td><td>execution</td><td>Фактический жизненный цикл озвучивания</td></tr>
+      <tr><td>`scene.snapshot.get` → `scene.snapshot`</td><td>query → reply</td><td>—</td><td>Request/Reply чтение Scene State</td></tr>
+      <tr><td>`output.speech.started/paused/resumed/ended`</td><td>event</td><td>Фактический статус TTS</td></tr>
+      <tr><td>`turn.cancelled`</td><td>event</td><td>Отмена с инициатором и причиной</td></tr>
+      <tr><td>`pipeline.stage.completed`</td><td>event</td><td>Времена, статус и ошибка стадии для диагностики</td></tr>
+    </tbody></table></div>
+    <p>Гипотезы имеют стабильный subject ID и возрастающую revision; consumer игнорирует дубликат и более старую ревизию. `final` означает окончание данной стадии, не абсолютную истинность. Очереди ограничены, а drop/coalesce/backpressure выбираются по классу сообщения. Exactly-once глобально не обещается.</p>
+
+    <h2 id="replay">06 · Record, Replay и изоляция подсистем</h2>
+    <p>Шина создаёт границу подмены: тестовый источник публикует те же контракты, что и сенсор; тестовый эффектор возвращает те же результаты, что и TTS. Поэтому реакцию рефлекса, обновление сцены или ядро можно проверить без запуска микрофона, ASR и настоящего TTS.</p>
+    <div class="table-wrap"><table><thead><tr><th>Режим</th><th>Сенсоры</th><th>Исполнители</th><th>Назначение</th></tr></thead><tbody>
+      <tr><td>`LIVE`</td><td>Реальные устройства/каналы</td><td>Реальные эффекторные адаптеры</td><td>Работа Веры</td></tr>
+      <tr><td>`RECORD`</td><td>Реальные источники и выбранные диагностические сигналы</td><td>Реальные, с фиксацией принятых решений/результатов</td><td>Сбор разрешённых эпизодов для разбора и регрессии</td></tr>
+      <tr><td>`REPLAY`</td><td>Запись событий или аудио-источник</td><td>Mock / deterministic adapters либо явно выбранные реальные модели</td><td>Повторение сценария при контролируемых условиях</td></tr>
+    </tbody></table></div>
+    <h3>Два уровня replay</h3>
+    <ol><li><b>Event replay:</b> готовые типизированные наблюдения/гипотезы подаются в сцену, внимание, рефлексы или ядро. Проверяет потребителей и логику, исключает устройства и ASR.</li><li><b>Audio replay:</b> разрешённый записанный PCM подаётся в аудио-цепочку. Проверяет VAD, ASR, классификаторы и временные метки; результат анализаторов снова попадает на общую шину.</li></ol>
+    <div class="diagram mermaid">sequenceDiagram
+      participant Mock as Mock Sensors
+      participant Bus as Event Bus
+      participant Reflex as Reflex
+      participant MockTTS as Mock TTS
+      participant Scene as Scene Builder
+      MockTTS->>Bus: output.speech.started (t=0)
+      Note over Bus: virtual clock advances by 500 ms
+      Mock->>Bus: speech.segment.started (t=500 ms)
+      Bus->>Reflex: speech.started + TTS active
+      Reflex->>Bus: output.speech.pause command
+      Bus->>MockTTS: pause(command_id)
+      MockTTS->>Bus: output.speech.paused (confirmed)
+      Bus->>Scene: output.speech.paused
+      Scene->>Bus: scene.revision.created (Vera paused)</div>
+    <h3>Что требуется для повторяемости</h3>
+    <ul><li>Управляемые часы, включая виртуальное продвижение времени без реального sleep.</li><li>Детерминированная подача входных сообщений и заданная политика порядка при одинаковых отметках времени.</li><li>Изолированное исходное состояние сцены, ядра, очередей и накопленной памяти.</li><li>Фиксированные версии обработчиков, конфигураций и модели; ответы внешних моделей записываются или заменяются fixture.</li><li>Зафиксированные seed там, где компонент поддерживает случайность.</li><li>Дубли, задержки, пропуски, устаревшие версии и переупорядочивание задаются как часть сценария.</li></ul>
+    <p>Шина сама не делает систему детерминированной. Для повторения внешняя LLM не вызывается заново молча: либо используется сохранённый ответ, либо run маркируется как nondeterministic/model re-evaluation и сравнивается по отдельному контракту.</p>
+    <h3>Event Inspector и типы проверок</h3>
+    <ul><li><b>Mock Sensors:</b> генераторы аудио-, текстовых и системных событий по тем же схемам.</li><li><b>Event Inspector:</b> последовательность событий с source, времени, causation/correlation, подписчиком, статусом доставки и причиной drop/coalesce.</li><li><b>Fault Injection:</b> управляемые задержки, повторы, пропуски, перестановки, ошибки моделей, недоступность storage и перегрузка очередей.</li><li><b>Regression fixtures:</b> ожидаемые события/состояния/решения и допуски по времени или оценкам.</li><li><b>Model comparison:</b> общий зафиксированный аудиоэпизод или event fixture прогоняется несколькими версиями анализатора; сравниваются transcript, scene revisions, решение, latency и ресурсы.</li></ul>
+    <p>Разрешённый реальный диалог может стать regression fixture только при явной политике записи и достаточном согласии. Данные минимизируются; исходное аудио удаляется/редактируется независимо от текстовых метаданных. Сохранённая запись не становится автоматически разрешением на облачную отправку.</p>
+
+    <h2 id="voice-turn">07 · Голосовой ход: параллельные контуры</h2>
+    <div class="diagram mermaid">flowchart LR
+      PCM[Микрофон PCM] --> IO[Audio I-O + AEC]
+      IO --> BUF[Ограниченный audio buffer]
+      BUF --> VAD[VAD / activity]
+      BUF --> ASR[Streaming ASR partial/final]
+      BUF --> SPK[Speaker tracking]
+      VAD --> BUS[Event Bus]
+      ASR --> BUS
+      SPK --> BUS
+      BUS --> REF[Рефлекс]
+      BUS --> SI[Scene Interpreter]
+      SI --> BUS
+      BUS --> SB[Scene Builder]
+      SB --> SCENE[Scene State]
+      SCENE --> ATT[Внимание]
+      ATT --> CORE[Ядро]
+      CORE --> BUS
+      BUS --> TTS[TTS / другие эффекторы]
+      TTS --> OUT[Динамики]
+      TTS -. output audio reference .-> IO
+      BUS -. selected trace .-> LOG[(Event Log)]</div>
+    <ol><li>Захват PCM идёт по data plane и не ждёт анализаторов.</li><li>Слух публикует раннюю акустическую активность. Рефлекс получает её немедленно и при проверенных условиях может запросить паузу TTS до транскрипта.</li><li>ASR, speaker tracking и классификаторы параллельно выдают provisional гипотезы и поздние уточнения.</li><li>Interpreter предлагает смысловые варианты по текущему evidence; Builder единолично сводит их в Scene State.</li><li>Внимание выбирает, нужно ли передать ход ядру или продолжать наблюдение.</li><li>Ядро выпускает ответ/действие с turn ID; эффектор публикует фактическое исполнение.</li><li>Собственный output reference попадает в AEC/слух; barge-in остаётся возможным, старый turn не загрязняет новый.</li></ol>
+    <div class="callout"><strong>Требование пользователя · разрешения macOS.</strong> Приложение запрашивает только разрешения, нужные для явно используемой функции. Доступ к микрофону выдаётся через системное согласие macOS (TCC) и действует, пока пользователь не отзовёт его в System Settings. Само разрешение не означает автоматический захват: микрофон включается только пользовательской кнопкой и остаётся выключенным при запуске приложения. Приложение не пытается обходить или закреплять разрешение. Keychain используется только для секретов, если появится функция, которой действительно нужно секретное хранилище; без такой функции доступ к Keychain не запрашивается.</div>
+    <div class="callout"><strong>Граница микрофона и диалога.</strong> Состояние захвата микрофона отдельно от состояния взаимодействия. Включение/выключение слуха не следует неявно связывать с режимом разговора.</div>
+
+    <h2 id="experiments">08 · План экспериментов</h2>
+    <ol><li><b>Контракты:</b> минимальный envelope, ID/revision, типы сообщений и виртуальные часы.</li><li><b>EventBus in-process:</b> изоляция подписчиков, ограниченные очереди, observer/trace и политика перегрузки.</li><li><b>Replay MVP:</b> fixture `tts.started → 500 ms → speech.started → tts.pause → tts.paused → scene.updated` с mock TTS и проверкой, что результат появился в сцене.</li><li><b>Fault injection:</b> повтор, задержка, старое событие, пропуск подтверждения, поздний ASR и перегрузка подписчика.</li><li><b>Audio replay:</b> короткий локально разрешённый набор: тишина, шум, речь к Вере, фоновая речь, перебивание и наложение.</li><li><b>ASR comparison:</b> одна запись, одинаковые сегменты/таймкодные критерии, версии/конфигурации зафиксированы; сравнить GigaAM и Qwen3-ASR на русском и смешанной русско-тайской речи.</li><li><b>Scene Interpreter:</b> размеченные неоднозначные примеры; rule baseline против Jev-style и иных кандидатов; отдельно считать false interruption, missed interruption, unknown accuracy и калибровку.</li><li><b>Scene Builder:</b> повторить один и тот же набор гипотез в разном порядке, проверить стабильное конечное состояние и auditable причинность.</li></ol>
+    <div class="table-wrap"><table><thead><tr><th>Метрика</th><th>Зачем измерять</th></tr></thead><tbody><tr><td>Акустическое начало → локальная пауза</td><td>Верхняя задержка рефлекса</td></tr><tr><td>Ложное / пропущенное перебивание</td><td>Баланс цены ошибок реакции</td></tr><tr><td>Partial/final ASR delay и WER</td><td>Качество и задержка слуха раздельно</td></tr><tr><td>Late/retracted hypothesis handling</td><td>Корректность обновления сцены</td></tr><tr><td>Loss/duplicate/queue pressure</td><td>Устойчивость event transport</td></tr><tr><td>Scene hypothesis precision / calibration</td><td>Насколько интерпретации пригодны для внимания</td></tr><tr><td>Replay parity</td><td>Совпадает ли состояние при идентичном fixture</td></tr></tbody></table></div>
+
+    <h2 id="decisions">09 · Принципы и открытые решения</h2>
+    <h3>Предложения для обсуждения — не приняты</h3><ul><li>Слух, интерпретация сцены, внимание, решение ядра и исполнение — отдельные ответственности.</li><li>Шина маршрутизирует небольшие сообщения; PCM и медиа имеют отдельный data plane.</li><li>Scene Interpreter предлагает гипотезы; Scene Builder владеет записью Scene State.</li><li>Быстрые локальные рефлексы не ждут LLM, полного транскрипта и хранилища.</li><li>LIVE / RECORD / REPLAY используют те же типизированные контракты, где это возможно.</li><li>Воспроизводимость требует управляемого времени, порядка, состояния и модельных ответов.</li><li>Команда не равна результату; гипотеза не равна факту; confidence не равна гарантированной калибровке.</li></ul>
+    <h3>Открытые вопросы</h3><ul><li>Конкретный transport/broker и длительность хранения сообщений.</li><li>Точная политика drop/coalesce/backpressure по каждому event class.</li><li>Где требуется persistence, а где допустим in-memory replay buffer.</li><li>Порог/latency SLO для barge-in и других reflex rules.</li><li>Какие сигналы внимания нужны в MVP и по каким критериям оценивать пользу.</li><li>Состав Scene State и механизм согласования конфликтующих анализаторов.</li><li>Выбранные ASR/эмоции/звуковые классификаторы и режим локального/облачного анализа.</li><li>Retention, согласие, redaction и допустимость превращения реальных диалогов в fixtures.</li></ul>
+    <h3>Первый критерий сквозной готовности</h3><p>Без микрофона и внешних моделей fixture с контролируемыми часами воспроизводится повторно: TTS отмечен как активный; через 500 мс приходит `speech.segment.started`; рефлекс выдаёт адресованную pause-команду; mock effector возвращает подтверждённый `output.speech.paused`; Scene Builder публикует следующую ревизию с приостановленным выходом и ссылками на причины. Повтор с тем же состоянием и входом даёт одинаковую трассу и конечное состояние.</p>
+
+    <h2 id="sources">Источники возможностей моделей</h2><p>Свойства моделей ниже проверены по первичным репозиториям на 18 ноября 2026 года. Это список кандидатов, не выбор реализации.</p>
+    <ul class="source-list"><li><a href="https://github.com/salute-developers/GigaAM">GigaAM — официальный репозиторий</a>: варианты ASR и отдельная модель GigaAM-Emo.</li><li><a href="https://github.com/QwenLM/Qwen3-ASR">Qwen3-ASR — официальный репозиторий</a>: поддержка русского/тайского и условия streaming режима.</li><li><a href="https://github.com/QwenAudio/SenseVoice">SenseVoice — официальный репозиторий</a>: scope опубликованной SenseVoiceSmall и разделение от diarization.</li><li><a href="https://github.com/lawrence3699/Jev-Style-2B-Decision-v4-MLX">Jev-Style v4 MLX card/mirror</a> и <a href="https://github.com/lawrence3699/jev-style/releases">jev-style releases</a>: типизированные решения, режимы входа и ограничения backend.</li></ul>
+    <div class="foot">VERA 2 · ЕДИНАЯ ДОКУМЕНТАЦИЯ · ФАЙЛ: docs/index.html · СОДЕРЖИМОЕ И СХЕМЫ ХРАНЯТСЯ ЗДЕСЬ</div>
+  </main>
+  <aside class="toc" id="toc"><div class="toc-title">НА ЭТОЙ СТРАНИЦЕ</div></aside>
+</div>
+<div class="search-results hidden" id="results" role="listbox"></div>
+<script>
+  mermaid.initialize({startOnLoad:false,theme:'dark',securityLevel:'strict',fontFamily:'-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',themeVariables:{darkMode:true,background:'#121510',primaryColor:'#252d20',primaryTextColor:'#e7e9e2',primaryBorderColor:'#617447',lineColor:'#9daa8e',secondaryColor:'#1c2829',tertiaryColor:'#1b1f19',clusterBkg:'#151914',clusterBorder:'#454e3b',edgeLabelBackground:'#171b15',fontSize:'13px'}});
+  (async()=>{const nodes=document.querySelectorAll('.mermaid');try{await mermaid.run({nodes})}catch(e){nodes.forEach(n=>{if(!n.querySelector('svg')){const pre=document.createElement('pre');pre.className='diagram-error';pre.textContent='Схема не загрузилась. Текст схемы сохранён в файле документации.\\n\\n'+n.textContent;n.replaceWith(pre)}})}})();
+  const headings=[...document.querySelectorAll('main h2[id],main h3[id]')];
+  const toc=document.querySelector('#toc'); for(const h of headings){const a=document.createElement('a');a.href='#'+h.id;a.textContent=h.textContent;a.className=h.tagName==='H3'?'sub':'';toc.appendChild(a)}
+  const nav=[...document.querySelectorAll('#nav a')];const sections=nav.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){nav.forEach(a=>a.classList.toggle('active',a.hash==='#'+e.target.id));toc.querySelectorAll('a').forEach(a=>a.classList.toggle('active',a.hash==='#'+e.target.id))}},{rootMargin:'-15% 0px -75% 0px'});sections.forEach(s=>observer.observe(s));headings.forEach(h=>observer.observe(h));
+  const search=document.querySelector('#search'),results=document.querySelector('#results');
+  function runSearch(){const q=search.value.trim().toLocaleLowerCase('ru');if(q.length<2){results.classList.add('hidden');return}const found=[];for(const el of document.querySelectorAll('main h1,main h2,main h3,main p,main li,main td,main pre')){const text=el.innerText||el.textContent;if(text.toLocaleLowerCase('ru').includes(q)){const section=el.closest('section')||el;let heading=el.closest('main').querySelector('h1').innerText;if(el.id)heading=el.innerText;else{let prev=el;while(prev&&prev.tagName!=='H2'&&prev.tagName!=='H3')prev=prev.previousElementSibling;if(prev)heading=prev.innerText}const excerpt=text.replace(/\\s+/g,' ').slice(0,150);found.push({heading,excerpt,id:(()=>{let p=el;while(p&&p.tagName!=='H2'&&p.tagName!=='H3'&&p.tagName!=='H1')p=p.previousElementSibling;if(p&&p.id)return p.id;let sectionHead=el.closest('main').querySelector('h1');return sectionHead.id||'architecture'})()});if(found.length===20)break}}results.innerHTML=found.length?found.map(x=>'<a class="result" href="#'+x.id+'"><b>'+x.heading+'</b><small>'+x.excerpt+'</small></a>').join(''):'<div class="result"><small>Совпадений не найдено</small></div>';results.classList.remove('hidden')}
+  search.addEventListener('input',runSearch);document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();search.focus()}if(e.key==='Escape'){results.classList.add('hidden');search.blur()}});document.addEventListener('click',e=>{if(!results.contains(e.target)&&!e.target.closest('.searchbox'))results.classList.add('hidden')});results.addEventListener('click',()=>results.classList.add('hidden'));
+</script>
+</body>
+</html>

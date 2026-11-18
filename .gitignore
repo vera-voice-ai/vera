@@ -1,0 +1,20 @@
+# SwiftPM build products
+.build/
+.swiftpm/
+package.resolved.bak
+
+# Python bytecode (workers ship sources only)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# macOS metadata
+.DS_Store
+._*
+
+# Local scratch
+*.log
+*.wav
+!prototype/Sensors/Workers/**/*.wav

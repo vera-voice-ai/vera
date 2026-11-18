@@ -1,0 +1,19 @@
+# Vera 2 agent instructions
+
+- The sole product and architecture documentation for Vera 2 is [`docs/index.html`](docs/index.html). Read it before proposing or implementing architecture changes. Do not create parallel Markdown specifications, diagrams, or event catalogs.
+- Update the documentation in that same site file when an architectural decision changes. Keep the diagrams, event names, examples, and subsystem contracts consistent with each other.
+- Record candidate decisions in section 03, “Журнал архитектурных решений”, as drafts with context and consequences. Never mark a decision accepted until Alex explicitly confirms it. Keep options and experiments visibly separate from agreed architecture.
+- `/Users/alex/Projects/vera` is Vera 1 and is reference-only. All Vera 2 changes belong in this repository.
+- Treat model capabilities and benchmark claims as versioned evidence. Link primary sources and keep candidate status separate from adopted architecture.
+
+## Project context captured from Alex
+
+- Vera is Alex's personal AI assistant. It runs locally on his MacBook, uses local tools, and calls an LLM from a provider.
+- The system has four modules: `Sensors`, `Scene`, `Core`, and `Response`, plus `Vera Signal Bus`. They are planned as five independently launched processes inside one Vera application. The main app is the entry point and process supervisor. Inter-process transport and readiness protocol are not yet selected.
+- Module responsibilities: Sensors observes incoming and internal signals; Scene maintains the current situation and decides whether it should be sent to Core; Core chooses priorities and actions and is the only module that initiates inter-module commands; Response executes commands and reports actual results. Scene can form revisable hypotheses. Sensors observes; it does not decide what the situation means or what Vera should do.
+- Signal Protocol has four `kind` values: `event`, `command`, `query`, and `reply`. `reply` answers a `query`; command acceptance or outcome is reported as an event from the responsible executor. `kind` describes interaction form; `domain` identifies the owning module. `source`, `target`, `type`, and `payload` provide message details. Visual color follows `domain` and does not affect routing.
+- Event types will grow substantially. Do not create or maintain a large exhaustive event-name catalog. Keep documentation at the level of message semantics and important examples. Hypotheses remain important, revisable information; they are not a fifth `kind`.
+- Video/vision work (“eyes”) is deferred. Current sensor exploration is audio-first, with text/UI, OS/system, and internal telemetry as other possible inputs. The current audio prototype analyzes selected WAV segments; it is not yet a continuous microphone listener.
+- Storage/Memory is infrastructure shared by the system, not owned by Core or the Bus. The main screen places Storage below Core and Response and lists what is persisted and where. In the current sensor prototype, WAV source files are read in place, speaker reference embeddings are saved under `~/Library/Application Support/VeraSensorPrototype/speaker-references.json`, model stderr logs go under `~/Library/Application Support/VeraSensorPrototype/Logs/`, and bus messages/transcripts are only held in process memory.
+- The prototype's main screen should show five dashed module/process contours: Sensors and Scene in the upper row; Core and Response in the lower row; Bus centered at about 70% width. Each module tile takes half the row. Only the Bus panel displays the live message stream. Scene, Core, and Response tiles stay empty until their implementations are added.
+- Place a Storage panel below Core and Response. Keep it as a factual list of data and its current destination; distinguish persistence that exists in the prototype from storage layers that are only planned.
