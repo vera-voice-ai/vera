@@ -129,3 +129,32 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     #expect(ready.count == 1)
     #expect(ready.first?.utteranceIDs == ["utterance/s1-seg3"])
 }
+
+// MARK: - Speaking while the answer is written
+
+@Test func chunkerCutsSentencesAndHoldsShortOnesAndNumbers() {
+    var chunker = SpeechChunker(minimumLength: 12)
+    var out: [String] = []
+    for piece in ["Кодовое слово", " сокол. Вто", "рая фраза, в файле 3.5 строки! Да", ". Хвост без точки"] { out += chunker.feed(piece) }
+    #expect(out == ["Кодовое слово сокол.", "Вторая фраза, в файле 3.5 строки!"])
+    #expect(chunker.flush() == "Да. Хвост без точки")
+}
+
+@MainActor @Test func coreSpeaksEachSentenceAsItStreamsAndNothingTwice() async {
+    struct Model: ChatModel {
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            var turn = ChatTurn()
+            for piece in ["Первое предложение готово. ", "Второе предложение тоже. ", "Без точки в конце"] { onText(piece); turn.text += piece }
+            return turn
+        }
+    }
+    let bus = SignalBus(); let collector = Collector()
+    let capture = await collector.start(bus)
+    defer { capture.cancel() }
+    let agent = CoreAgent(loop: AgentLoop(model: Model(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.setEnabled(true)
+    _ = await agent.run(request: "скажи", bus: bus)
+    #expect(await eventually { collector.messages.filter { $0.type == "output.speech.requested" }.count == 3 })
+    let spoken = collector.messages.filter { $0.type == "output.speech.requested" }.compactMap { $0.payload["text"] }
+    #expect(spoken == ["Первое предложение готово.", "Второе предложение тоже.", "Без точки в конце"])
+}

@@ -2,6 +2,13 @@ import Foundation
 import Observation
 import SignalBus
 
+final class Locked<Value>: @unchecked Sendable {
+    private var value: Value
+    private let lock = NSLock()
+    init(_ value: Value) { self.value = value }
+    func withLock<R>(_ body: (inout Value) -> R) -> R { lock.withLock { body(&value) } }
+}
+
 /// Core's hands: takes what the scene hands over (`scene.turn.ready`) and runs it as a task through the agent loop.
 /// Every step is also a bus event of the core domain, so it can be recorded, replayed and shown.
 @MainActor
@@ -35,6 +42,8 @@ public final class CoreAgent {
     /// Only turns where the assistant is addressed by name (`addressed == likely`) run as tasks. A turn that merely
     /// continues a conversation (`possible`) is not an instruction to act: the owner talks a lot near the microphone.
     public var actsOnPossibleAddress = false
+    /// Speak each sentence as soon as the model has written it, instead of the whole answer at the end.
+    public var streamsSpeech = true
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
@@ -62,7 +71,7 @@ public final class CoreAgent {
                 waiting.resume(returning: message.payload["context"])
                 continue
             }
-            if message.domain == .response, message.type == "output.speech.started", let taskID = message.correlationID {
+            if message.domain == .response, message.type == "output.speech.started", let taskID = message.payload["task_id"] {
                 update(taskID) { task in
                     if task.speechStartMilliseconds == nil { task.speechStartMilliseconds = Int(Date().timeIntervalSince(task.readyAt) * 1000) }
                 }
@@ -125,8 +134,22 @@ public final class CoreAgent {
         var context = await sceneContext(bus: bus, excluding: turnID)
         update(id) { $0.contextMilliseconds = Int(Date().timeIntervalSince(contextStart) * 1000) }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
+        // The answer is spoken sentence by sentence as it is written, one command per sentence, in order.
+        let chunker = Locked(SpeechChunker())
+        let (sentences, sink) = AsyncStream<String>.makeStream()
+        let speaker = Swift.Task { @MainActor in
+            var index = 0
+            for await sentence in sentences {
+                index += 1
+                await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                                 type: "output.speech.requested", subjectID: id, correlationID: id,
+                                                 payload: ["text": sentence, "task_id": id, "part": "\(index)"]))
+            }
+        }
+        let streams = streamsSpeech && bus != nil
         let result = await loop.run(request: request, context: context) { [weak self] event in
             guard let self else { return }
+            if streams, case let .text(delta) = event { for sentence in chunker.withLock({ $0.feed(delta) }) { sink.yield(sentence) } }
             Swift.Task { @MainActor in
                 if case let .toolCalled(record) = event {
                     self.update(id) { $0.toolCalls.append(record) }
@@ -156,10 +179,12 @@ public final class CoreAgent {
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))
         if result.succeeded {
-            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
-                                             type: "output.speech.requested", subjectID: id, correlationID: id,
-                                             payload: ["text": result.answer, "task_id": id]))
+            // What the stream did not already cover: a tail without a full stop, or the whole answer when nothing streamed.
+            if streams, let tail = chunker.withLock({ $0.flush() }) { sink.yield(tail) }
+            if !streams || chunker.withLock({ $0.emitted.isEmpty }) { sink.yield(result.answer) }
         }
+        sink.finish()
+        await speaker.value
         return result
     }
 

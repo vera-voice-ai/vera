@@ -35,6 +35,7 @@ public final class ResponseSpeaker {
     public var isMuted = false
     public let voice: String
 
+    private var playTail: Swift.Task<Void, Never>?
     private let synthesizer: any Synthesizer
     private let player: any AudioPlaying
 
@@ -47,16 +48,24 @@ public final class ResponseSpeaker {
         for await message in stream {
             guard message.kind == .command, message.type == "output.speech.requested", message.target == "Response",
                   let text = message.payload["text"]?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { continue }
-            await speak(text, requestID: message.id, bus: bus)
+            // Synthesis of the next sentence starts at once and runs while the previous one is still playing; playback keeps the order.
+            let prefetched = isMuted ? nil : Swift.Task { try await self.synthesizer.synthesize(text: text) }
+            let previous = playTail
+            let taskID = message.payload["task_id"]
+            playTail = Swift.Task { @MainActor in
+                await previous?.value
+                await self.speak(text, requestID: message.id, taskID: taskID, bus: bus, prefetched: prefetched)
+            }
         }
     }
 
-    public func speak(_ text: String, requestID: UUID = UUID(), bus: SignalBus?) async {
+    public func speak(_ text: String, requestID: UUID = UUID(), taskID: String? = nil, bus: SignalBus?,
+                      prefetched: Swift.Task<Data, Error>? = nil) async {
         let id = requestID.uuidString.lowercased()
         func publish(_ type: String, _ payload: [String: String]) async {
             await bus?.publish(SignalMessage(kind: .event, domain: .response, source: "Response.Speaker", type: type,
                                              subjectID: id, correlationID: id, causationID: id,
-                                             payload: payload.merging(["voice": voice]) { a, _ in a }))
+                                             payload: payload.merging(["voice": voice, "task_id": taskID ?? ""]) { a, _ in a }))
         }
         utterances.insert(Utterance(id: id, text: text), at: 0)
         if utterances.count > 20 { utterances.removeLast(utterances.count - 20) }
@@ -67,7 +76,9 @@ public final class ResponseSpeaker {
         }
         let synthesisStart = ContinuousClock.now
         let wav: Data
-        do { wav = try await synthesizer.synthesize(text: text) } catch {
+        do {
+            if let prefetched { wav = try await prefetched.value } else { wav = try await synthesizer.synthesize(text: text) }
+        } catch {
             update(id) { $0.state = .failed; $0.error = "\(error)" }
             await publish("output.speech.failed", ["reason": "synthesis", "error": "\(error)"])
             return
