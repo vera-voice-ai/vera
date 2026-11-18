@@ -14,6 +14,8 @@ public struct TaskOutcome: Sendable {
     public let promptTokens: Int
     public let completionTokens: Int
     public let error: String?
+    /// Start of the final answer on one line, so a failed row shows what Vera actually said.
+    public let answerExcerpt: String
 }
 
 /// Runs task cases through the real `CoreAgent` (the same one that handles spoken requests), each in a fresh sandbox.
@@ -43,9 +45,15 @@ public final class TaskRunner {
                                         failedChecks: failed, steps: result.steps, toolCalls: result.toolCalls.count,
                                         firstTokenMilliseconds: result.firstTokenMilliseconds, totalMilliseconds: result.totalMilliseconds,
                                         promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens,
-                                        error: result.error))
+                                        error: result.error, answerExcerpt: Self.excerpt(result.answer)))
         }
         return outcomes
+    }
+
+    /// One line of at most 160 characters, with table-breaking characters replaced.
+    public nonisolated static func excerpt(_ answer: String) -> String {
+        let flat = answer.split(whereSeparator: \.isNewline).joined(separator: " ").replacingOccurrences(of: "|", with: "/")
+        return flat.count > 160 ? String(flat.prefix(160)) + "…" : flat
     }
 
     public nonisolated static func evaluate(_ checks: [Check], sandbox: URL, answer: String) -> [String] {

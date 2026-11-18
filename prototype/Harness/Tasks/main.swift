@@ -43,7 +43,8 @@ let outcomes = await runner.run(cases) { print($0) }
 print("\n| task | ok | steps | tools | first token ms | total ms | tokens in/out | note |")
 print("|---|---|---|---|---|---|---|---|")
 for o in outcomes {
-    let note = o.error ?? o.failedChecks.joined(separator: "; ")
+    var note = o.error ?? o.failedChecks.joined(separator: "; ")
+    if !o.passed, o.error == nil { note += " · said: \(o.answerExcerpt)" }
     print("| \(o.id) | \(o.passed ? "yes" : "NO") | \(o.steps) | \(o.toolCalls) | \(o.firstTokenMilliseconds.map(String.init) ?? "-") | \(o.totalMilliseconds) | \(o.promptTokens)/\(o.completionTokens) | \(note) |")
 }
 let passed = outcomes.filter(\.passed).count

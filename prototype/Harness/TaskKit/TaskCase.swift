@@ -78,6 +78,12 @@ public extension Suite {
         func read(_ path: String) -> String { (try? String(contentsOf: root.appending(path: path), encoding: .utf8)) ?? "" }
         let loop = read("Core/Agent/AgentLoop.swift"), chunker = read("Core/Agent/SpeechChunker.swift"), agent = read("Core/Agent/CoreAgent.swift")
         let files = ["AgentLoop.swift": loop, "SpeechChunker.swift": chunker, "CoreAgent.swift": agent, "MemoryStore.swift": read("Core/Memory/MemoryStore.swift")]
+        /// Accepted spellings of a number read from code: the digits, a decimal comma, and the Russian word for small values.
+        func spellings(_ value: String) -> [String] {
+            let words = ["0": "ноль", "1": "один", "2": "два", "3": "три", "4": "четыре", "5": "пять",
+                         "6": "шесть", "7": "семь", "8": "восемь", "9": "девять", "10": "десять", "1.5": "полторы"]
+            return [value, value.replacingOccurrences(of: ".", with: ","), words[value]].compactMap { $0 }
+        }
         func number(after marker: String, in text: String) -> String? {
             guard let range = text.range(of: marker) else { return nil }
             return String(text[range.upperBound...].prefix(while: { $0.isNumber || $0 == "." }))
@@ -85,15 +91,15 @@ public extension Suite {
         var cases: [TaskCase] = []
         if let steps = number(after: "maxSteps: Int = ", in: loop) {
             cases.append(TaskCase(id: "repo-max-steps", category: "repo", spoken: "Вера, в файле AgentLoop.swift найди, сколько шагов цикла по умолчанию и скажи число",
-                                  checks: [.answerContainsAny([steps])], files: files))
+                                  checks: [.answerContainsAny(spellings(steps))], files: files))
         }
         if let length = number(after: "minimumLength: Int = ", in: chunker) {
             cases.append(TaskCase(id: "repo-chunk-length", category: "repo", spoken: "В SpeechChunker.swift какая минимальная длина предложения по умолчанию",
-                                  checks: [.answerContainsAny([length])], files: files))
+                                  checks: [.answerContainsAny(spellings(length))], files: files))
         }
         if let timeout = number(after: "sceneTimeout: TimeInterval = ", in: agent) {
             cases.append(TaskCase(id: "repo-scene-timeout", category: "repo", spoken: "Посмотри CoreAgent.swift и скажи, сколько секунд ядро ждёт ответа сцены",
-                                  checks: [.answerContainsAny([timeout, timeout.replacingOccurrences(of: ".", with: ",")])], files: files))
+                                  checks: [.answerContainsAny(spellings(timeout))], files: files))
         }
         cases.append(TaskCase(id: "repo-stop-words", category: "repo", spoken: "В CoreAgent.swift найди, какие слова считаются командой остановки, назови хотя бы три",
                               checks: [.answerContainsAll(["стоп", "отмена"])], files: files))
