@@ -50,6 +50,8 @@ public final class CoreAgent {
     private var pendingScene: [String: CheckedContinuation<String?, Never>] = [:]
     /// Tasks run one at a time, in the order heard: two of them editing the same folder at once would race.
     private var queueTail: Swift.Task<Void, Never>?
+    /// Every task started and not yet finished, so that "стоп" can cancel them all.
+    private var live: [UUID: Swift.Task<Void, Never>] = [:]
     /// Ask the scene for the situation and pass it to the model with every task.
     public var includesSceneContext = true
     /// How long a task waits for the scene's answer before going on without context.
@@ -83,12 +85,42 @@ public final class CoreAgent {
             let text = Self.stripAddress(message.payload["text"] ?? "")
             guard !text.isEmpty else { continue }
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
-            let previous = queueTail
-            queueTail = Swift.Task { @MainActor in
-                await previous?.value
-                _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp)
+            if Self.isStopCommand(text) {
+                await cancelAll(bus: bus, reason: "voice")
+                continue
             }
+            let previous = queueTail
+            let key = UUID()
+            let work = Swift.Task { @MainActor in
+                await previous?.value
+                if !Swift.Task.isCancelled {
+                    _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp)
+                }
+                self.live[key] = nil
+            }
+            live[key] = work
+            queueTail = work
         }
+    }
+
+    /// Stops what Core is doing and what Response is saying: the running task, the queued ones, the speech.
+    public func cancelAll(bus: SignalBus?, reason: String) async {
+        for work in live.values { work.cancel() }
+        live.removeAll()
+        queueTail = nil
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.tasks.cancelled",
+                                         payload: ["reason": reason]))
+        await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                         type: "output.speech.stop", payload: ["reason": reason]))
+    }
+
+    /// A short imperative that ends what is going on: "стоп", "отмена", "хватит", "замолчи", "подожди".
+    public static func isStopCommand(_ text: String) -> Bool {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard (1...3).contains(words.count) else { return false }
+        let stops: Set<String> = ["стоп", "отмена", "отмени", "хватит", "замолчи", "молчи", "подожди", "погоди", "тихо", "перестань"]
+        let fillers: Set<String> = ["вера", "вер", "пожалуйста", "ну", "давай", "всё", "все", "уже", "так"]
+        return words.contains { stops.contains($0) } && words.allSatisfy { stops.contains($0) || fillers.contains($0) }
     }
 
     /// Reads the scene by asking it (query/reply on the bus). Nil when it does not answer in time.

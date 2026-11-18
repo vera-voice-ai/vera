@@ -108,10 +108,11 @@ public struct OpenAICompatibleClient: ChatModel {
         }
         defer { guardTask.cancel() }
         do {
-            let turn = try await reader.value
+            let turn = try await withTaskCancellationHandler { try await reader.value } onCancel: { reader.cancel() }
             await journal?.record(request: body, turn: turn, error: nil)
             return turn
         } catch is CancellationError {
+            if Task.isCancelled { await journal?.record(request: body, turn: ChatTurn(), error: "cancelled"); throw CancellationError() }
             await journal?.record(request: body, turn: ChatTurn(), error: "stalled")
             throw ChatError.stalled
         } catch {

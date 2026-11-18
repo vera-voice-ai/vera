@@ -56,13 +56,14 @@ public struct AgentLoop: Sendable {
             return Int(d.components.seconds * 1_000 + d.components.attoseconds / 1_000_000_000_000_000)
         }
         for step in 1...maxSteps {
+            if Task.isCancelled { result.error = "cancelled"; break }
             onEvent(.modelRequest(step: step))
             result.steps = step
             let turn: ChatTurn
             do {
                 turn = try await model.respond(messages: messages, tools: tools.definitions) { onEvent(.text($0)) }
             } catch {
-                result.error = "\(error)"
+                result.error = Task.isCancelled ? "cancelled" : "\(error)"
                 break
             }
             if result.firstTokenMilliseconds == nil, let first = turn.firstTokenMilliseconds { result.firstTokenMilliseconds = elapsed() - turn.totalMilliseconds + first }
@@ -76,6 +77,7 @@ public struct AgentLoop: Sendable {
                 break
             }
             for call in turn.toolCalls {
+                if Task.isCancelled { result.error = "cancelled"; break }
                 let toolStarted = ContinuousClock.now
                 let output = tools.run(call)
                 let d = toolStarted.duration(to: .now)
@@ -86,6 +88,7 @@ public struct AgentLoop: Sendable {
                 onEvent(.toolCalled(record))
                 messages.append(ChatMessage(role: .tool, content: output.text, toolCallID: call.id))
             }
+            if result.error != nil { break }
             if step == maxSteps { result.error = "step limit reached" }
         }
         result.totalMilliseconds = elapsed()

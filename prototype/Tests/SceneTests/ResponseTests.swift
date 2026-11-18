@@ -158,3 +158,38 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     let spoken = collector.messages.filter { $0.type == "output.speech.requested" }.compactMap { $0.payload["text"] }
     #expect(spoken == ["Первое предложение готово.", "Второе предложение тоже.", "Без точки в конце"])
 }
+
+// MARK: - Stop and cancel
+
+@MainActor @Test func shortImperativesStopWhileOrdinaryRequestsDoNot() {
+    #expect(CoreAgent.isStopCommand("Вера, стоп!"))
+    #expect(CoreAgent.isStopCommand("Отмена"))
+    #expect(CoreAgent.isStopCommand("ну всё хватит"))
+    #expect(!CoreAgent.isStopCommand("останови сервер на порту 80"))
+    #expect(!CoreAgent.isStopCommand("подожди пять минут и прочитай файл"))
+    #expect(!CoreAgent.isStopCommand(""))
+}
+
+@MainActor @Test func cancelStopsARunningTaskAndAsksResponseToStopSpeaking() async {
+    struct SlowModel: ChatModel {
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            try await Task.sleep(for: .seconds(30)); return ChatTurn()
+        }
+    }
+    let bus = SignalBus(); let collector = Collector()
+    let capture = await collector.start(bus)
+    defer { capture.cancel() }
+    let agent = CoreAgent(loop: AgentLoop(model: SlowModel(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.setEnabled(true)
+    let consuming = Task { await agent.consume(bus) }
+    defer { consuming.cancel() }
+    try? await Task.sleep(for: .milliseconds(200))
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/a", "text": "Вера, очень долгая задача", "addressed": "likely"]))
+    #expect(await eventually { agent.tasks.first?.state == .running })
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/b", "text": "Вера, стоп", "addressed": "likely"]))
+    #expect(await eventually { agent.tasks.first?.state == .failed })
+    #expect(agent.tasks.first?.error == "cancelled")
+    #expect(await eventually { collector.messages.contains { $0.type == "output.speech.stop" } })
+}

@@ -12,7 +12,11 @@ public protocol Synthesizer: Sendable {
 /// Plays WAV audio and returns when it has finished.
 public protocol AudioPlaying: Sendable {
     func play(wav: Data) async throws
+    /// Cuts the current playback short; `play` then returns.
+    func stop() async
 }
+
+public extension AudioPlaying { func stop() async {} }
 
 /// The speaking half of Response. Core asks (`output.speech.requested`, a command only Core may send); this
 /// executes and reports what actually happened as events: started, ended or failed. A command is not a result.
@@ -35,6 +39,8 @@ public final class ResponseSpeaker {
     public var isMuted = false
     public let voice: String
 
+    /// Bumped by a stop command: sentences queued before it are dropped.
+    private var generation = 0
     private var playTail: Swift.Task<Void, Never>?
     private let synthesizer: any Synthesizer
     private let player: any AudioPlaying
@@ -46,14 +52,24 @@ public final class ResponseSpeaker {
     public func consume(_ bus: SignalBus) async {
         let stream = await bus.subscribe()
         for await message in stream {
+            if message.kind == .command, message.type == "output.speech.stop", message.target == "Response" {
+                generation += 1
+                playTail = nil
+                await player.stop()
+                await bus.publish(SignalMessage(kind: .event, domain: .response, source: "Response.Speaker", type: "output.speech.stopped",
+                                                payload: ["reason": message.payload["reason"] ?? ""]))
+                continue
+            }
             guard message.kind == .command, message.type == "output.speech.requested", message.target == "Response",
                   let text = message.payload["text"]?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { continue }
             // Synthesis of the next sentence starts at once and runs while the previous one is still playing; playback keeps the order.
             let prefetched = isMuted ? nil : Swift.Task { try await self.synthesizer.synthesize(text: text) }
             let previous = playTail
+            let mine = generation
             let taskID = message.payload["task_id"]
             playTail = Swift.Task { @MainActor in
                 await previous?.value
+                guard mine == self.generation else { prefetched?.cancel(); return }
                 await self.speak(text, requestID: message.id, taskID: taskID, bus: bus, prefetched: prefetched)
             }
         }
@@ -127,6 +143,11 @@ public final class WavPlayer: NSObject, AudioPlaying, AVAudioPlayerDelegate, @un
                 } catch { continuation.resume(throwing: error) }
             }
         }
+    }
+
+    public func stop() async {
+        DispatchQueue.main.async { self.lock.withLock { self.player }?.stop() }
+        finish(throwing: nil)
     }
 
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
