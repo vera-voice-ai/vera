@@ -179,10 +179,11 @@ final class PrototypeModel {
         let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
         self.sileroSpeech = SileroSpeech(runtime: runtime, voice: "baya")
         self.speaker = ResponseSpeaker(synthesizer: SileroSynthesizer(speech: sileroSpeech), player: WavPlayer(), voice: "baya")
+        let memory = MemoryStore(directory: runtime.appSupportURL.appending(path: "Memory", directoryHint: .isDirectory))
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
-                                     tools: WorkspaceTools(root: workspace).registry, systemPrompt: VeraPrompt.system) : nil,
-            unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)")
+                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)), systemPrompt: VeraPrompt.system) : nil,
+            unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
         self.tape = AudioTape(directory: runtime.appSupportURL.appending(path: "Tape", directoryHint: .isDirectory))
         let gigaAMAnalyzer = GigaAMAnalyzer(runtime: runtime)
         let camPlusAnalyzer = SpeakerEmbeddingAnalyzer(runtime: runtime)

@@ -44,6 +44,8 @@ public final class CoreAgent {
     public var actsOnPossibleAddress = false
     /// Speak each sentence as soon as the model has written it, instead of the whole answer at the end.
     public var streamsSpeech = true
+    /// Facts and finished tasks kept between restarts; nil means Core forgets everything when the app closes.
+    public var memory: MemoryStore?
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
@@ -58,8 +60,9 @@ public final class CoreAgent {
     public var sceneTimeout: TimeInterval = 1.5
 
     /// `loop` is nil when no model is configured (for example no key): the agent then reports why instead of acting.
-    public init(loop: AgentLoop?, unavailableReason: String? = nil) {
+    public init(loop: AgentLoop?, unavailableReason: String? = nil, memory: MemoryStore? = nil) {
         self.loop = loop
+        self.memory = memory
         self.unavailableReason = loop == nil ? (unavailableReason ?? "no model configured") : nil
     }
 
@@ -165,6 +168,7 @@ public final class CoreAgent {
         let contextStart = Date()
         var context = await sceneContext(bus: bus, excluding: turnID)
         update(id) { $0.contextMilliseconds = Int(Date().timeIntervalSince(contextStart) * 1000) }
+        if let facts = memory?.factsText() { context = [context, facts].compactMap { $0 }.joined(separator: "\n") }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
         // The answer is spoken sentence by sentence as it is written, one command per sentence, in order.
         let chunker = Locked(SpeechChunker())
@@ -210,6 +214,7 @@ public final class CoreAgent {
                                                    "prompt_tokens": "\(result.usage.promptTokens)",
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))
+        if result.succeeded { memory?.recordTask(request: request, answer: result.answer) }
         if result.succeeded {
             // What the stream did not already cover: a tail without a full stop, or the whole answer when nothing streamed.
             if streams, let tail = chunker.withLock({ $0.flush() }) { sink.yield(tail) }
