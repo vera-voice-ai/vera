@@ -39,8 +39,7 @@ run_once() {
 }
 
 if [ "${1:-}" = "loop" ]; then
-  run_once; sleep 3600; run_once
-  run_once; sleep 3600; run_once
+  run_once; sleep 3600; run_once; sleep 3600; run_once
   # Until 01:00 local (Moscow) time: the owner wakes at about 01:30 Moscow time.
   end=$(date -j -f "%Y-%m-%d %H:%M" "$(date +%Y-%m-%d) 01:00" +%s)
   [ "$(date +%s)" -gt "$end" ] && end=$(( end + 86400 ))
