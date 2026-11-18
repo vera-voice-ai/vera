@@ -90,6 +90,8 @@ public struct SceneTTL: Sendable {
     /// (ROC-AUC 0.60) and at 0.9 would have cut 61 % of the continuing speakers off. The earlier 93 % on finished
     /// segments mostly reflected the 2 s of silence at their end. Turn on only after validation on labelled data.
     public var turnEndShortcut = false
+    /// How long after Vera stops speaking the room still carries her voice (reverb, a late echo).
+    public var speechTail: TimeInterval = 1.5
     public var wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
     /// ASR artifacts on silence and noise; a turn made only of these is dropped as `noise`.
     public var noisePhrases: [String] = ["продолжение следует", "субтитры сделал", "субтитры создавал", "спасибо за просмотр"]
@@ -293,6 +295,8 @@ public struct SceneBuilder: Sendable {
     private var textReadyAt: [String: Date] = [:]
     private var membersAtText: [String: Int] = [:]
     private var lastHandedOverAt: Date?
+    /// When Vera spoke: (start, end), end nil while she still does. Her voice reaching the microphone must not become a request.
+    private var ownSpeech: [(start: Date, end: Date?)] = []
     private var lastOwnerSeenAt: Date?
     private var lastOwnerConfirmedAt: Date?
     private var lastHeardAt: Date?
@@ -308,6 +312,17 @@ public struct SceneBuilder: Sendable {
         // It is an ordinary recorded message, so replaying a session reproduces the model's decisions.
         if message.domain == .scene, message.type == "scene.turn.verdict" {
             applyVerdict(message)
+            return commit(now: message.timestamp)
+        }
+        // Response reports what Vera actually does with her voice.
+        if message.domain == .response, message.type.hasPrefix("output.speech.") {
+            switch message.type {
+            case "output.speech.started": ownSpeech.append((message.timestamp, nil))
+            case "output.speech.ended", "output.speech.failed":
+                if let index = ownSpeech.lastIndex(where: { $0.end == nil }) { ownSpeech[index].end = message.timestamp }
+            default: break
+            }
+            if ownSpeech.count > 20 { ownSpeech.removeFirst(ownSpeech.count - 20) }
             return commit(now: message.timestamp)
         }
         guard message.domain == .sensors else { return nil }
@@ -510,6 +525,9 @@ public struct SceneBuilder: Sendable {
             }
             turns[index].addressed = addressed(turns[index], now)
             if Self.isNoise(text, ttl.noisePhrases) { decide(index, .heard(reason: "noise"), now); continue }
+            if members.contains(where: { veraWasSpeaking(at: $0.startedAt, until: $0.endedAt ?? now) }) {
+                decide(index, .heard(reason: "vera_voice"), now); continue
+            }
             if let speakerID = turns[index].speakerID, participants[speakerID]?.role == .assistant {
                 decide(index, .heard(reason: "assistant_voice"), now); continue
             }
@@ -568,6 +586,14 @@ public struct SceneBuilder: Sendable {
         if let handed = lastHandedOverAt, now.timeIntervalSince(handed) <= ttl.engagedWindow,
            turn.speakerID != "unknown" { return .possible }
         return .unlikely
+    }
+
+    /// Whether any of Vera's own speech (plus its tail) overlaps the span of an utterance.
+    private func veraWasSpeaking(at start: Date, until end: Date) -> Bool {
+        ownSpeech.contains { speech in
+            let speechEnd = (speech.end ?? .distantFuture).addingTimeInterval(ttl.speechTail)
+            return speech.start <= end && start <= speechEnd
+        }
     }
 
     private func ownerPresent(_ now: Date) -> Bool {

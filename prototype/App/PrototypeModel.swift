@@ -9,6 +9,7 @@ import Sensors
 import SignalBus
 import Scene
 import Core
+import Response
 
 struct AnalyzerUsage: Sendable {
     var cpuPercent: Double
@@ -51,6 +52,10 @@ final class PrototypeModel {
     let core = CoreInbox()
     /// Core's hands. Works only in a small sandbox folder for now, and only when started with `--agent`.
     let agent: CoreAgent
+    /// Response: speaks the agent's answers aloud (Silero, voice baya) on Core's command.
+    let speaker: ResponseSpeaker
+    private let sileroSpeech: SileroSpeech
+    var speechAvailable: Bool { SileroSpeech.isAvailable(runtime) }
     let workspaceURL: URL
     private let recorder = BusRecorder()
     private let tape: AudioTape
@@ -172,6 +177,8 @@ final class PrototypeModel {
             try? content.write(to: workspace.appending(path: name), atomically: true, encoding: .utf8)
         }
         let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
+        self.sileroSpeech = SileroSpeech(runtime: runtime, voice: "baya")
+        self.speaker = ResponseSpeaker(synthesizer: SileroSynthesizer(speech: sileroSpeech), player: WavPlayer(), voice: "baya")
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
                                      tools: WorkspaceTools(root: workspace).registry, systemPrompt: VeraPrompt.system) : nil,
@@ -200,6 +207,7 @@ final class PrototypeModel {
         Task { await busMonitor.consume(bus) }
         Task { await core.consume(bus) }
         Task { await agent.consume(bus) }
+        Task { await speaker.consume(bus) }
         // Launch arguments work without a window: a locked screen creates none, and the microphone does not need one.
         Task { @MainActor [weak self] in self?.runAutomationIfRequested() }
         Task { await scene.consume(bus) }
@@ -967,7 +975,8 @@ final class PrototypeModel {
     //   --snapshot-after <s,s,...>     seconds after launch at which to take them
     //   --quit-after <s>               stop and quit after that many seconds
     //   --listen                       start the real microphone by itself (for remote use)
-    //   --agent                        let Core run handed-over turns as tasks (sandbox folder only)
+    //   --agent                        let Core run handed-over turns as tasks (sandbox folder only); answers are spoken
+    //   --mute                         do not speak answers aloud
     //   --snapshot-interval <s>        with --snapshot-dir: keep overwriting latest.png (and latest-bottom.png)
     func runAutomationIfRequested() {
         guard !automationStarted else { return }
@@ -992,7 +1001,11 @@ final class PrototypeModel {
                 }
             }
         }
-        if args.contains("--agent") { agent.setEnabled(true) }
+        if args.contains("--mute") { speaker.isMuted = true }
+        if args.contains("--agent") {
+            agent.setEnabled(true)
+            if speechAvailable { let speech = sileroSpeech; Task { try? await speech.warm() } }   // the first answer should not wait for a cold start
+        }
         if args.contains("--listen") {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1.5))

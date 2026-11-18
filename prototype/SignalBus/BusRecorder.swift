@@ -61,7 +61,7 @@ public actor BusRecorder {
 
     private func write(_ message: SignalMessage) {
         // Sensors are the input; the judge's verdicts are also model output that a replay must be able to repeat.
-        guard message.domain == .sensors || message.type == "scene.turn.verdict", let handle,
+        guard message.domain == .sensors || message.type == "scene.turn.verdict" || message.type.hasPrefix("output.speech."), let handle,
               var line = try? encoder.encode(message) else { return }
         line.append(0x0A)
         do {

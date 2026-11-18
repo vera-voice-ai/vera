@@ -46,8 +46,10 @@ struct ContentView: View {
                         }
                         .frame(maxWidth: .infinity).frame(height: 300)
 
-                        emptyModule(name: "vera-response", title: "Response", color: Color(hex: 0x4ADE80))
-                            .frame(maxWidth: .infinity).frame(height: 95)
+                        moduleContour(name: "vera-response", title: "Response", color: Color(hex: 0x4ADE80)) {
+                            ResponsePanel(speaker: model.speaker, available: model.speechAvailable)
+                        }
+                        .frame(maxWidth: .infinity).frame(height: 300)
                     }
 
                     storageContour

@@ -89,6 +89,11 @@ public final class CoreAgent {
                                                    "prompt_tokens": "\(result.usage.promptTokens)",
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))
+        if result.succeeded {
+            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                             type: "output.speech.requested", subjectID: id, correlationID: id,
+                                             payload: ["text": result.answer, "task_id": id]))
+        }
         return result
     }
 
