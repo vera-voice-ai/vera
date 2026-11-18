@@ -42,9 +42,9 @@ struct ContentView: View {
 
                     HStack(alignment: .top, spacing: 12) {
                         moduleContour(name: "vera-core", title: "Core", color: Color(hex: 0xFACC15)) {
-                            CorePanel(inbox: model.core)
+                            CorePanel(inbox: model.core, agent: model.agent)
                         }
-                        .frame(maxWidth: .infinity).frame(height: 190)
+                        .frame(maxWidth: .infinity).frame(height: 300)
 
                         emptyModule(name: "vera-response", title: "Response", color: Color(hex: 0x4ADE80))
                             .frame(maxWidth: .infinity).frame(height: 95)

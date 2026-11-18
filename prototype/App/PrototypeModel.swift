@@ -49,6 +49,9 @@ final class PrototypeModel {
     let bus = SignalBus()
     let busMonitor = BusMonitorModel()
     let core = CoreInbox()
+    /// Core's hands. Works only in a small sandbox folder for now, and only when started with `--agent`.
+    let agent: CoreAgent
+    let workspaceURL: URL
     private let recorder = BusRecorder()
     private let tape: AudioTape
     private var lastTapePosition: AudioTape.Position?
@@ -161,6 +164,18 @@ final class PrototypeModel {
     init() {
         let runtime = ModelRuntime()
         self.runtime = runtime
+        let workspace = runtime.appSupportURL.appending(path: "Workspace", directoryHint: .isDirectory)
+        self.workspaceURL = workspace
+        try? FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        for (name, content) in ["notes.txt": "первая строка заметок\nкодовое слово: сокол\n42\n", "status.txt": "статус: draft\nавтор: тест\n"]
+        where !FileManager.default.fileExists(atPath: workspace.appending(path: name).path) {
+            try? content.write(to: workspace.appending(path: name), atomically: true, encoding: .utf8)
+        }
+        let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
+        self.agent = CoreAgent(
+            loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
+                                     tools: WorkspaceTools(root: workspace).registry, systemPrompt: VeraPrompt.system) : nil,
+            unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)")
         self.tape = AudioTape(directory: runtime.appSupportURL.appending(path: "Tape", directoryHint: .isDirectory))
         let gigaAMAnalyzer = GigaAMAnalyzer(runtime: runtime)
         let camPlusAnalyzer = SpeakerEmbeddingAnalyzer(runtime: runtime)
@@ -184,6 +199,7 @@ final class PrototypeModel {
         }
         Task { await busMonitor.consume(bus) }
         Task { await core.consume(bus) }
+        Task { await agent.consume(bus) }
         // Launch arguments work without a window: a locked screen creates none, and the microphone does not need one.
         Task { @MainActor [weak self] in self?.runAutomationIfRequested() }
         Task { await scene.consume(bus) }
@@ -951,6 +967,7 @@ final class PrototypeModel {
     //   --snapshot-after <s,s,...>     seconds after launch at which to take them
     //   --quit-after <s>               stop and quit after that many seconds
     //   --listen                       start the real microphone by itself (for remote use)
+    //   --agent                        let Core run handed-over turns as tasks (sandbox folder only)
     //   --snapshot-interval <s>        with --snapshot-dir: keep overwriting latest.png (and latest-bottom.png)
     func runAutomationIfRequested() {
         guard !automationStarted else { return }
@@ -975,6 +992,7 @@ final class PrototypeModel {
                 }
             }
         }
+        if args.contains("--agent") { agent.setEnabled(true) }
         if args.contains("--listen") {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1.5))

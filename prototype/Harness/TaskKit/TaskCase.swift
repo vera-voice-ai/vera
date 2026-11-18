@@ -19,6 +19,8 @@ public enum Check: Sendable {
     case answerContainsAll([String])
     /// The answer asks a question or declines, and nothing changed.
     case askedOrDeclined
+    /// Passes if at least one of the alternatives passes completely (for requests with more than one fair reading).
+    indirect case anyOf([[Check]])
 }
 
 public struct TaskCase: Sendable {

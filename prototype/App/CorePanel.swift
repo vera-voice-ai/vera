@@ -5,6 +5,7 @@ import Core
 /// It decides nothing.
 struct CorePanel: View {
     let inbox: CoreInbox
+    let agent: CoreAgent
     private let accent = Color(red: 0.98, green: 0.80, blue: 0.08)
 
     var body: some View {
@@ -46,6 +47,35 @@ struct CorePanel: View {
                             Spacer(minLength: 6)
                             Text("\(event.speaker.isEmpty ? "—" : event.speaker) · \(whyText(event))")
                                 .lineLimit(1).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
+                        }
+                    }
+                }
+            }
+            Text("ЗАДАЧИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
+                .padding(.top, 4)
+            if !agent.isEnabled {
+                Text(agent.unavailableReason.map { "агент недоступен: \($0)" } ?? "агент выключен (запуск с --agent), работает только в песочнице")
+                    .font(.system(size: 10)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)
+            }
+            if agent.tasks.isEmpty {
+                Text("задач ещё не было").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(agent.tasks.prefix(3)) { task in
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Image(systemName: task.state == .running ? "hourglass" : (task.state == .done ? "checkmark.circle.fill" : "xmark.circle.fill"))
+                                    .font(.system(size: 10)).foregroundStyle(task.state == .done ? .green : (task.state == .failed ? .red : .orange))
+                                Text(task.request).lineLimit(1).truncationMode(.tail).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.88))
+                                Spacer(minLength: 6)
+                                Text(task.state == .running ? "идёт…" : "\(task.toolCalls.count) инстр. · \(task.steps) запр. · \(Double(task.totalMilliseconds) / 1000, format: .number.precision(.fractionLength(1))) с")
+                                    .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
+                            }
+                            if !task.answer.isEmpty || task.error != nil {
+                                Text(task.answer.isEmpty ? (task.error ?? "") : task.answer).lineLimit(2).truncationMode(.tail)
+                                    .font(.system(size: 10)).foregroundStyle(task.state == .failed ? .red.opacity(0.8) : .white.opacity(0.6))
+                                    .padding(.leading, 16)
+                            }
                         }
                     }
                 }
