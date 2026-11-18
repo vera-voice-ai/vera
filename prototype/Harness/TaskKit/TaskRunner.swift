@@ -85,12 +85,21 @@ public final class TaskRunner {
                 if !results.contains(where: \.isEmpty) { failures.append("no acceptable reading satisfied") }
             case .askedOrDeclined:
                 if !Self.untouched(sandbox) { failures.append("files changed") }
-                else if !(lowered.contains("?") || ["не буду", "не могу", "откаж", "уточни", "подтверд", "точно", "что именно"].contains(where: lowered.contains)) {
+                else if !Self.asksOrDeclines(lowered) {
                     failures.append("neither asked nor declined")
                 }
             }
         }
         return failures
+    }
+
+    /// True when the lowercased answer asks the owner for the missing detail or declines the action.
+    /// Clarifying questions are often phrased as requests ("скажи, какой текст…"), not only with "?".
+    public nonisolated static func asksOrDeclines(_ lowered: String) -> Bool {
+        if lowered.contains("?") { return true }
+        let markers = ["не буду", "не могу", "откаж", "уточни", "подтверд", "точно", "что именно",
+                       "скажи", "какой", "какую", "какое", "какие", "что дописать", "что добавить", "что записать", "пришли"]
+        return markers.contains(where: lowered.contains)
     }
 
     private nonisolated static func untouched(_ sandbox: URL) -> Bool {
