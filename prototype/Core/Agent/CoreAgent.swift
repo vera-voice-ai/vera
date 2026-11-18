@@ -48,6 +48,8 @@ public final class CoreAgent {
     public var memory: MemoryStore?
     /// Skills listed to the model by name and description; it loads the full text itself.
     public var skills: SkillStore?
+    /// Silence mode: Vera still works on requests, but nothing is spoken aloud until the owner switches the voice back on.
+    public private(set) var isSilent = false
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
@@ -101,6 +103,10 @@ public final class CoreAgent {
                 await cancelAll(bus: bus, reason: "voice")
                 continue
             }
+            if let change = Self.silenceCommand(text) {
+                await setSilent(change, bus: bus, causation: message.id)
+                continue
+            }
             let previous = queueTail
             let key = UUID()
             let work = Swift.Task { @MainActor in
@@ -113,6 +119,37 @@ public final class CoreAgent {
             live[key] = work
             queueTail = work
         }
+    }
+
+    /// Enters or leaves silence mode. Entering is announced aloud once ("Режим тишины") and cuts what is being said;
+    /// leaving is announced too, since by then speech is allowed again.
+    public func setSilent(_ silent: Bool, bus: SignalBus?, causation: UUID? = nil) async {
+        guard silent != isSilent else { return }
+        if silent { await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response", type: "output.speech.stop", payload: ["reason": "silence_mode"])) }
+        let phrase = silent ? Self.silencePhrase : Self.voiceBackPhrase
+        if !silent { isSilent = false }
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.mode.changed",
+                                         causationID: causation?.uuidString.lowercased(),
+                                         payload: ["mode": silent ? "silent" : "speaking"]))
+        await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                         type: "output.speech.requested", payload: ["text": phrase, "mode_change": silent ? "silent" : "speaking"]))
+        if silent { isSilent = true }
+    }
+
+    public static let silencePhrase = "Режим тишины"
+    public static let voiceBackPhrase = "Голос включён"
+
+    /// true = go silent, false = speak again, nil = not a mode command. Short imperatives only, so that a sentence
+    /// that merely mentions silence ("в комнате была тишина") is not taken for a command.
+    public static func silenceCommand(_ text: String) -> Bool? {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard (1...6).contains(words.count) else { return nil }
+        let joined = words.joined(separator: " ")
+        let on = ["режим тишины", "тихий режим", "помолчи", "молчи", "не говори", "замолчи на время", "режим молчания"]
+        let off = ["выйди из режима тишины", "выключи режим тишины", "режим тишины выключи", "говори", "включи голос", "можешь говорить", "голос включи", "заговори"]
+        if off.contains(where: { joined.contains($0) }) { return false }
+        if on.contains(where: { joined.contains($0) }) { return true }
+        return nil
     }
 
     private var hasSomethingToStop: Bool {
@@ -190,6 +227,11 @@ public final class CoreAgent {
         let speaker = Swift.Task { @MainActor in
             var index = 0
             for await sentence in sentences {
+                if self.isSilent {
+                    await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.speech.suppressed",
+                                                     subjectID: id, payload: ["task_id": id, "chars": "\(sentence.count)"]))
+                    continue
+                }
                 index += 1
                 await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
                                                  type: "output.speech.requested", subjectID: id, correlationID: id,

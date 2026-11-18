@@ -33,7 +33,7 @@ public final class TaskRunner {
         for task in cases {
             let sandbox = base.appending(path: task.id, directoryHint: .isDirectory)
             try? FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
-            for (name, content) in Fixtures.files { try? content.write(to: sandbox.appending(path: name), atomically: true, encoding: .utf8) }
+            for (name, content) in Fixtures.files.merging(task.files, uniquingKeysWith: { a, _ in a }) { try? content.write(to: sandbox.appending(path: name), atomically: true, encoding: .utf8) }
             let agent = CoreAgent(loop: makeLoop(sandbox))
             agent.setEnabled(true)
             log("→ \(task.id)")

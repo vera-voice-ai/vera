@@ -215,3 +215,43 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
                                     payload: ["turn_id": "turn/b", "text": "Stop.", "addressed": "no", "reason": "not_addressed"]))
     #expect(await eventually { agent.tasks.first?.state == .failed })
 }
+
+// MARK: - Silence mode
+
+@MainActor @Test func silenceCommandsAreShortImperativesOnly() {
+    #expect(CoreAgent.silenceCommand("Вера, режим тишины") == true)
+    #expect(CoreAgent.silenceCommand("помолчи пожалуйста") == true)
+    #expect(CoreAgent.silenceCommand("Вера, выйди из режима тишины") == false)
+    #expect(CoreAgent.silenceCommand("говори") == false)
+    #expect(CoreAgent.silenceCommand("вчера в комнате была тишина и я долго думал об этом") == nil)
+    #expect(CoreAgent.silenceCommand("прочитай файл") == nil)
+}
+
+@MainActor @Test func inSilenceModeTheModeIsAnnouncedOnceAndAnswersAreNotSpoken() async {
+    struct Model: ChatModel {
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            var turn = ChatTurn(); turn.text = "Ответ готов, но вслух не скажу."; onText(turn.text); return turn
+        }
+    }
+    let bus = SignalBus(); let collector = Collector()
+    let capture = await collector.start(bus)
+    defer { capture.cancel() }
+    let agent = CoreAgent(loop: AgentLoop(model: Model(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.setEnabled(true)
+    let consuming = Task { await agent.consume(bus) }
+    defer { consuming.cancel() }
+    try? await Task.sleep(for: .milliseconds(200))
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/s", "text": "Вера, режим тишины", "addressed": "likely"]))
+    #expect(await eventually { agent.isSilent })
+    #expect(await eventually { collector.messages.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Режим тишины" } })
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/t", "text": "Вера, скажи что-нибудь", "addressed": "likely"]))
+    #expect(await eventually { agent.tasks.first?.state == .done })
+    #expect(await eventually { collector.messages.contains { $0.type == "core.speech.suppressed" } })
+    #expect(collector.messages.filter { $0.type == "output.speech.requested" }.count == 1)
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/u", "text": "Вера, говори", "addressed": "likely"]))
+    #expect(await eventually { !agent.isSilent })
+    #expect(await eventually { collector.messages.contains { $0.payload["text"] == "Голос включён" } })
+}

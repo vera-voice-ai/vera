@@ -6,6 +6,7 @@ import TaskKit
 // or the Vera 2 Keychain item). Prints a table of numbers; the model journal keeps the full conversations locally.
 //
 //   swift run TaskBench [basic|spoken]  all 32 tasks, or only the 8 basic / the 24 spoken-style ones
+//   swift run TaskBench repo           read-only questions about Vera's own source (copies in the sandbox)
 //   swift run TaskBench ask "..."       one free request in a fresh sandbox, prints the answer
 
 let args = Array(CommandLine.arguments.dropFirst())
@@ -27,6 +28,9 @@ if args.first == "ask", args.count > 1 {
     cases = [TaskCase(id: "ask", category: "free", spoken: args[1...].joined(separator: " "), checks: [])]
 } else if args.first == "basic" {
     cases = Suite.basic
+} else if args.first == "repo" {
+    // Run from the prototype folder: the questions are about Vera's own source, read from the working directory.
+    cases = Suite.repo(root: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
 } else if args.first == "spoken" {
     cases = Suite.spoken
 } else {
