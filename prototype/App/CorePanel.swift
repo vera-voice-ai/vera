@@ -65,6 +65,7 @@ struct CorePanel: View {
                 Text(agent.unavailableReason.map { "агент недоступен: \($0)" } ?? "агент выключен (запуск с --agent), работает только в песочнице")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)
             }
+            memoryRow
             if agent.tasks.isEmpty {
                 Text("задач ещё не было").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))
             } else {
@@ -93,6 +94,20 @@ struct CorePanel: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    /// What Core keeps between tasks: remembered facts, task history and the skills it can load.
+    private var memoryRow: some View {
+        let counts = agent.memory?.counts
+        let skills = agent.skills?.all().map(\.name) ?? []
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("ПАМЯТЬ И НАВЫКИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
+            Text("фактов: \(counts?.facts ?? 0) · задач в истории: \(counts?.tasks ?? 0) · навыки: \(skills.isEmpty ? "нет" : skills.joined(separator: ", "))")
+                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+            Text("инструменты: read_file, list_dir, write_file, replace_in_file, remember, search_memory, read_skill · голосом «стоп» отменяет задачу и речь")
+                .font(.system(size: 9)).foregroundStyle(.white.opacity(0.42)).lineLimit(2)
+        }
+        .padding(.top, 4)
     }
 
     /// Where the time went, in the order it is spent: queue, scene question, first token, the rest of the model and tools, speech.

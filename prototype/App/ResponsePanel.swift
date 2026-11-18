@@ -14,7 +14,7 @@ struct ResponsePanel: View {
                 Text(!available ? "Озвучка недоступна" : speaker.isMuted ? "Озвучка выключена" : "Озвучка Silero · голос \(speaker.voice)")
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.88))
                 Spacer()
-                Text("команда output.speech.requested от Core").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
+                Text("предложения по команде output.speech.requested от Core; output.speech.stop обрывает").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             }
             Text("СКАЗАНО ВСЛУХ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
             if speaker.utterances.isEmpty {

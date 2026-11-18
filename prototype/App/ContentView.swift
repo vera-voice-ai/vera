@@ -512,6 +512,10 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 storageItem("Логи моделей", "~/Library/Application Support/VeraSensorPrototype/Logs/")
                 storageItem("Лента звука", "Всё, что слышит микрофон: WAV 16 кГц mono, по файлу на час, бессрочно (~115 МБ/ч) · ~/Library/Application Support/VeraSensorPrototype/Tape/<день>/<час>.wav")
+                storageItem("Память Core", "Факты и история задач, JSONL (бессрочно, до 20 МБ на файл) · ~/Library/Application Support/VeraSensorPrototype/Memory/")
+                storageItem("Навыки", "Markdown-файлы с описанием в шапке; Core видит список и подгружает текст по read_skill · ~/Library/Application Support/VeraSensorPrototype/Skills/")
+                storageItem("Журнал модели", "Каждый запрос и ответ модели, без заголовков авторизации · ~/Library/Application Support/VeraSensorPrototype/Journal/")
+                storageItem("Рабочая папка агента", "Единственное место, где Core читает и пишет файлы · ~/Library/Application Support/VeraSensorPrototype/Workspace/")
                 storageItem("Запись шины", "Сообщения Sensors, один JSONL на сессию микрофона · ~/Library/Application Support/VeraSensorPrototype/Recordings/")
                 storageItem("Ревизии сцены", "Только в памяти процесса; сохраняются лишь как сообщения scene в шине, которые не пишутся.", color: .orange)
             }
