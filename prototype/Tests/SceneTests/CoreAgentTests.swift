@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import Core
+import SignalBus
 import TaskKit
 
 private func sandbox(_ files: [String: String] = Fixtures.files) -> URL {
@@ -136,4 +137,32 @@ private func turn(text: String = "", calls: [ToolCall] = []) -> ChatTurn {
     // Declining is accepted only if nothing changed.
     #expect(TaskRunner.evaluate([.askedOrDeclined], sandbox: sandbox(), answer: "Что именно удалить?").isEmpty)
     #expect(!TaskRunner.evaluate([.askedOrDeclined], sandbox: root, answer: "Что именно удалить?").isEmpty)
+}
+
+@MainActor @Test func coreActsOnlyWhenAddressedByNameUnlessToldOtherwise() async {
+    struct Model: ChatModel {
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            var turn = ChatTurn(); turn.text = "ок"; return turn
+        }
+    }
+    let bus = SignalBus()
+    let agent = CoreAgent(loop: AgentLoop(model: Model(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.setEnabled(true)
+    let task = Task { await agent.consume(bus) }
+    defer { task.cancel() }
+    try? await Task.sleep(for: .milliseconds(150))
+    func ready(_ id: String, _ addressed: String) -> SignalMessage {
+        SignalMessage(domain: .scene, source: "Scene.Builder", type: "scene.turn.ready",
+                      payload: ["turn_id": id, "text": "Вера, сделай", "addressed": addressed])
+    }
+    await bus.publish(ready("turn/1", "possible"))
+    try? await Task.sleep(for: .milliseconds(400))
+    #expect(agent.tasks.isEmpty)
+    await bus.publish(ready("turn/2", "likely"))
+    for _ in 0..<40 where agent.tasks.isEmpty { try? await Task.sleep(for: .milliseconds(50)) }
+    #expect(agent.tasks.count == 1)
+    agent.actsOnPossibleAddress = true
+    await bus.publish(ready("turn/3", "possible"))
+    for _ in 0..<40 where agent.tasks.count < 2 { try? await Task.sleep(for: .milliseconds(50)) }
+    #expect(agent.tasks.count == 2)
 }

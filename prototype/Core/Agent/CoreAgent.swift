@@ -25,6 +25,9 @@ public final class CoreAgent {
     public private(set) var tasks: [Task] = []
     public private(set) var isEnabled = false
     public private(set) var unavailableReason: String?
+    /// Only turns where the assistant is addressed by name (`addressed == likely`) run as tasks. A turn that merely
+    /// continues a conversation (`possible`) is not an instruction to act: the owner talks a lot near the microphone.
+    public var actsOnPossibleAddress = false
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
@@ -41,6 +44,7 @@ public final class CoreAgent {
         let stream = await bus.subscribe()
         for await message in stream {
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
+                  actsOnPossibleAddress || message.payload["addressed"] == "likely",
                   let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
             let text = Self.stripAddress(message.payload["text"] ?? "")
             guard !text.isEmpty else { continue }

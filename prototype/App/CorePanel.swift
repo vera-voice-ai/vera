@@ -51,8 +51,16 @@ struct CorePanel: View {
                     }
                 }
             }
-            Text("ЗАДАЧИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
-                .padding(.top, 4)
+            HStack(spacing: 8) {
+                Text("ЗАДАЧИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
+                Spacer()
+                // A safety switch: while it is off, nothing Vera hears becomes an action.
+                Button(agent.isEnabled ? "агент включён · выключить" : "агент выключен · включить") { agent.setEnabled(!agent.isEnabled) }
+                    .buttonStyle(.plain).font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(agent.isEnabled ? .green.opacity(0.9) : .white.opacity(0.55))
+                    .disabled(agent.unavailableReason != nil)
+            }
+            .padding(.top, 4)
             if !agent.isEnabled {
                 Text(agent.unavailableReason.map { "агент недоступен: \($0)" } ?? "агент выключен (запуск с --agent), работает только в песочнице")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)
