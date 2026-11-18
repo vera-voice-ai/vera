@@ -179,14 +179,19 @@ final class PrototypeModel {
         let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
         self.sileroSpeech = SileroSpeech(runtime: runtime, voice: "baya")
         self.speaker = ResponseSpeaker(synthesizer: SileroSynthesizer(speech: sileroSpeech), player: WavPlayer(), voice: "baya")
+        let repoRoot = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VERA_REPO"] ?? "/Users/alex/Projects/vera-v2")
+        let selfModifier = SelfModifier(repo: repoRoot, worktree: runtime.appSupportURL.appending(path: "Self/vera", directoryHint: .isDirectory),
+                                        applyScript: repoRoot.appending(path: "prototype/Evaluation/apply-self.sh"))
         let skillStore = SkillStore(directory: runtime.appSupportURL.appending(path: "Skills", directoryHint: .isDirectory))
         Self.seedSkills(in: skillStore.directory)
         let memory = MemoryStore(directory: runtime.appSupportURL.appending(path: "Memory", directoryHint: .isDirectory))
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
-                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry), systemPrompt: VeraPrompt.system) : nil,
+                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry).adding(skillStore.writeRegistry).adding(selfModifier.registry), systemPrompt: VeraPrompt.system) : nil,
             unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
         self.agent.skills = skillStore
+        self.agent.selfModifier = selfModifier
+        self.agent.restartHandler = { NSApplication.shared.terminate(nil) }
         self.tape = AudioTape(directory: runtime.appSupportURL.appending(path: "Tape", directoryHint: .isDirectory))
         let gigaAMAnalyzer = GigaAMAnalyzer(runtime: runtime)
         let camPlusAnalyzer = SpeakerEmbeddingAnalyzer(runtime: runtime)

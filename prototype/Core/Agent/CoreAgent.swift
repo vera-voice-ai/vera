@@ -50,6 +50,10 @@ public final class CoreAgent {
     public var skills: SkillStore?
     /// Silence mode: Vera still works on requests, but nothing is spoken aloud until the owner switches the voice back on.
     public private(set) var isSilent = false
+    /// Her own source and the gates a change to it passes; nil when she may not change herself.
+    public var selfModifier: SelfModifier?
+    /// Called after a confirmed change was built, when the app should quit so that the new build can start.
+    public var restartHandler: (@MainActor () -> Void)?
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
@@ -103,6 +107,10 @@ public final class CoreAgent {
                 await cancelAll(bus: bus, reason: "voice")
                 continue
             }
+            if Self.isApplyCommand(text), let modifier = selfModifier, modifier.hasPendingApply {
+                await applySelfChange(modifier, bus: bus)
+                continue
+            }
             if let change = Self.silenceCommand(text) {
                 await setSilent(change, bus: bus, causation: message.id)
                 continue
@@ -134,6 +142,30 @@ public final class CoreAgent {
         await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
                                          type: "output.speech.requested", payload: ["text": phrase, "mode_change": silent ? "silent" : "speaking"]))
         if silent { isSilent = true }
+    }
+
+    /// The owner's confirmation of a self-change: "применяй", "да, применяй", "применяй изменения".
+    public static func isApplyCommand(_ text: String) -> Bool {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard (1...4).contains(words.count) else { return false }
+        let allowed: Set<String> = ["да", "вера", "вер", "применяй", "применить", "примени", "изменения", "давай", "ну"]
+        return words.contains(where: { ["применяй", "применить", "примени"].contains($0) }) && words.allSatisfy { allowed.contains($0) }
+    }
+
+    private func applySelfChange(_ modifier: SelfModifier, bus: SignalBus?) async {
+        let summary = modifier.pendingDescription
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.self.applying", payload: ["summary": summary]))
+        await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response", type: "output.speech.requested",
+                                         payload: ["text": "Применяю изменения. Соберу себя и перезапущусь, это займёт несколько минут."]))
+        let outcome = await Swift.Task.detached { modifier.applyConfirmed() }.value
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: outcome.ok ? "core.self.applied" : "core.self.failed",
+                                         payload: ["log": outcome.log]))
+        if outcome.ok {
+            restartHandler?()
+        } else {
+            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response", type: "output.speech.requested",
+                                             payload: ["text": "Сборка не удалась, остаюсь на прежней версии."]))
+        }
     }
 
     public static let silencePhrase = "Режим тишины"
