@@ -12,7 +12,9 @@ let package = Package(
         .target(name: "Core", dependencies: ["SignalBus"], path: "Core"),
         .target(name: "HarnessKit", dependencies: ["Scene", "SignalBus"], path: "Harness/Kit"),
         .executableTarget(name: "Harness", dependencies: ["HarnessKit"], path: "Harness/CLI"),
+        .target(name: "TaskKit", dependencies: ["Core", "SignalBus"], path: "Harness/TaskKit"),
+        .executableTarget(name: "TaskBench", dependencies: ["TaskKit", "Core", "SignalBus"], path: "Harness/Tasks"),
         .executableTarget(name: "VeraSensorPrototype", dependencies: ["SignalBus", "Sensors", "Scene", "Core"], path: "App"),
-        .testTarget(name: "SceneTests", dependencies: ["Scene", "SignalBus", "Sensors", "Core", "HarnessKit"], path: "Tests/SceneTests")
+        .testTarget(name: "SceneTests", dependencies: ["Scene", "SignalBus", "Sensors", "Core", "HarnessKit", "TaskKit"], path: "Tests/SceneTests")
     ]
 )

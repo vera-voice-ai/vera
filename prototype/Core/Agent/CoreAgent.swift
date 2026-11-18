@@ -1,0 +1,111 @@
+import Foundation
+import Observation
+import SignalBus
+
+/// Core's hands: takes what the scene hands over (`scene.turn.ready`) and runs it as a task through the agent loop.
+/// Every step is also a bus event of the core domain, so it can be recorded, replayed and shown.
+@MainActor
+@Observable
+public final class CoreAgent {
+    public struct Task: Identifiable, Sendable {
+        public enum State: Sendable { case running, done, failed }
+        public let id: String
+        public let request: String
+        public var state: State = .running
+        public var answer = ""
+        public var toolCalls: [ToolCallRecord] = []
+        public var steps = 0
+        public var totalMilliseconds = 0
+        public var firstTokenMilliseconds: Int?
+        public var error: String?
+        public let startedAt = Date()
+    }
+
+    /// Newest first, the last 20.
+    public private(set) var tasks: [Task] = []
+    public private(set) var isEnabled = false
+    public private(set) var unavailableReason: String?
+
+    private let loop: AgentLoop?
+    private var handled: Set<String> = []
+
+    /// `loop` is nil when no model is configured (for example no key): the agent then reports why instead of acting.
+    public init(loop: AgentLoop?, unavailableReason: String? = nil) {
+        self.loop = loop
+        self.unavailableReason = loop == nil ? (unavailableReason ?? "no model configured") : nil
+    }
+
+    public func setEnabled(_ enabled: Bool) { isEnabled = enabled && loop != nil }
+
+    public func consume(_ bus: SignalBus) async {
+        let stream = await bus.subscribe()
+        for await message in stream {
+            guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
+                  let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
+            let text = Self.stripAddress(message.payload["text"] ?? "")
+            guard !text.isEmpty else { continue }
+            _ = await run(request: text, turnID: turnID, bus: bus, causation: message.id)
+        }
+    }
+
+    /// Runs one task. Also the entry point for benchmarks.
+    @discardableResult
+    public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil) async -> AgentResult {
+        guard let loop else {
+            var result = AgentResult(); result.error = unavailableReason
+            return result
+        }
+        let id = "task/\(turnID?.replacingOccurrences(of: "turn/", with: "") ?? UUID().uuidString.prefix(8).lowercased())"
+        tasks.insert(Task(id: id, request: request), at: 0)
+        if tasks.count > 20 { tasks.removeLast(tasks.count - 20) }
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.started",
+                                         subjectID: id, causationID: causation?.uuidString.lowercased(),
+                                         payload: ["task_id": id, "request_chars": "\(request.count)"]))
+        let result = await loop.run(request: request) { [weak self] event in
+            guard let self else { return }
+            Swift.Task { @MainActor in
+                if case let .toolCalled(record) = event {
+                    self.update(id) { $0.toolCalls.append(record) }
+                    await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.tool.called",
+                                                     subjectID: id, payload: ["task_id": id, "tool": record.name, "ok": "\(record.ok)",
+                                                                              "ms": "\(record.milliseconds)"]))
+                }
+            }
+        }
+        update(id) {
+            $0.state = result.succeeded ? .done : .failed
+            $0.answer = result.answer
+            $0.steps = result.steps
+            $0.totalMilliseconds = result.totalMilliseconds
+            $0.firstTokenMilliseconds = result.firstTokenMilliseconds
+            $0.error = result.error
+        }
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.finished",
+                                         subjectID: id,
+                                         payload: ["task_id": id, "success": "\(result.succeeded)", "answer": result.answer,
+                                                   "steps": "\(result.steps)", "tool_calls": "\(result.toolCalls.count)",
+                                                   "first_token_ms": result.firstTokenMilliseconds.map(String.init) ?? "",
+                                                   "total_ms": "\(result.totalMilliseconds)",
+                                                   "prompt_tokens": "\(result.usage.promptTokens)",
+                                                   "completion_tokens": "\(result.usage.completionTokens)",
+                                                   "error": result.error ?? ""]))
+        return result
+    }
+
+    private func update(_ id: String, _ change: (inout Task) -> Void) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        change(&tasks[index])
+    }
+
+    /// "Вера, прочитай файл" → "прочитай файл": the address is not part of the task.
+    public static func stripAddress(_ text: String) -> String {
+        var rest = Substring(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        let names: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
+        while let first = rest.split(whereSeparator: { !$0.isLetter }).first, names.contains(first.lowercased()),
+              rest.lowercased().hasPrefix(first.lowercased()) {
+            rest = rest.dropFirst(first.count)
+            rest = rest.drop(while: { $0 == "," || $0 == ":" || $0 == "-" || $0 == " " || $0 == "!" })
+        }
+        return String(rest).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}

@@ -90,7 +90,7 @@ public struct SceneTTL: Sendable {
     /// (ROC-AUC 0.60) and at 0.9 would have cut 61 % of the continuing speakers off. The earlier 93 % on finished
     /// segments mostly reflected the 2 s of silence at their end. Turn on only after validation on labelled data.
     public var turnEndShortcut = false
-    public var wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка"]
+    public var wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
     /// ASR artifacts on silence and noise; a turn made only of these is dropped as `noise`.
     public var noisePhrases: [String] = ["продолжение следует", "субтитры сделал", "субтитры создавал", "спасибо за просмотр"]
     public init() {}

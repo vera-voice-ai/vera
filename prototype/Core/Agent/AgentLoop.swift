@@ -1,0 +1,99 @@
+import Foundation
+
+public struct ToolCallRecord: Sendable {
+    public let name: String
+    public let arguments: String
+    public let ok: Bool
+    public let resultPreview: String
+    public let milliseconds: Int
+}
+
+public struct AgentResult: Sendable {
+    public var answer = ""
+    /// Number of requests sent to the model.
+    public var steps = 0
+    public var toolCalls: [ToolCallRecord] = []
+    public var firstTokenMilliseconds: Int?
+    public var totalMilliseconds = 0
+    public var usage = TokenUsage()
+    /// Nil when the loop ended with an answer.
+    public var error: String?
+    public var succeeded: Bool { error == nil && !answer.isEmpty }
+}
+
+public enum AgentEvent: Sendable {
+    case modelRequest(step: Int)
+    case text(String)
+    case toolCalled(ToolCallRecord)
+    case finished(AgentResult)
+}
+
+/// The whole agent: ask the model, run the tools it calls, feed the results back, repeat until it answers in text
+/// or the step limit is reached. Nothing else: no planning layer, no memory, no hidden state between runs.
+public struct AgentLoop: Sendable {
+    public let model: any ChatModel
+    public let tools: ToolRegistry
+    public let systemPrompt: String
+    public let maxSteps: Int
+
+    public init(model: any ChatModel, tools: ToolRegistry, systemPrompt: String, maxSteps: Int = 8) {
+        self.model = model; self.tools = tools; self.systemPrompt = systemPrompt; self.maxSteps = maxSteps
+    }
+
+    public func run(request: String, history: [ChatMessage] = [],
+                    onEvent: @escaping @Sendable (AgentEvent) -> Void = { _ in }) async -> AgentResult {
+        let started = ContinuousClock.now
+        var result = AgentResult()
+        var messages = [ChatMessage(role: .system, content: systemPrompt)] + history + [ChatMessage(role: .user, content: request)]
+        func elapsed() -> Int {
+            let d = started.duration(to: .now)
+            return Int(d.components.seconds * 1_000 + d.components.attoseconds / 1_000_000_000_000_000)
+        }
+        for step in 1...maxSteps {
+            onEvent(.modelRequest(step: step))
+            result.steps = step
+            let turn: ChatTurn
+            do {
+                turn = try await model.respond(messages: messages, tools: tools.definitions) { onEvent(.text($0)) }
+            } catch {
+                result.error = "\(error)"
+                break
+            }
+            if result.firstTokenMilliseconds == nil, let first = turn.firstTokenMilliseconds { result.firstTokenMilliseconds = elapsed() - turn.totalMilliseconds + first }
+            result.usage.promptTokens += turn.usage.promptTokens
+            result.usage.completionTokens += turn.usage.completionTokens
+            messages.append(ChatMessage(role: .assistant, content: turn.text.isEmpty ? nil : turn.text,
+                                        toolCalls: turn.toolCalls, reasoning: turn.reasoning.isEmpty ? nil : turn.reasoning))
+            if turn.toolCalls.isEmpty {
+                result.answer = turn.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if result.answer.isEmpty { result.error = "the model ended without an answer" }
+                break
+            }
+            for call in turn.toolCalls {
+                let toolStarted = ContinuousClock.now
+                let output = tools.run(call)
+                let d = toolStarted.duration(to: .now)
+                let record = ToolCallRecord(name: call.name, arguments: String(call.arguments.prefix(300)), ok: output.ok,
+                                            resultPreview: String(output.text.prefix(200)),
+                                            milliseconds: Int(d.components.seconds * 1_000 + d.components.attoseconds / 1_000_000_000_000_000))
+                result.toolCalls.append(record)
+                onEvent(.toolCalled(record))
+                messages.append(ChatMessage(role: .tool, content: output.text, toolCallID: call.id))
+            }
+            if step == maxSteps { result.error = "step limit reached" }
+        }
+        result.totalMilliseconds = elapsed()
+        onEvent(.finished(result))
+        return result
+    }
+}
+
+public enum VeraPrompt {
+    /// Short on purpose: the answer is spoken aloud, and the tools define what the agent can do.
+    public static let system = """
+    Ты Вера, голосовой помощник Алексея. Твои ответы озвучиваются, поэтому отвечай по-русски, коротко и по делу, \
+    без разметки, списков и длинных вступлений. У тебя есть рабочая папка: читай и меняй файлы только через \
+    инструменты и не выдумывай содержимое, сначала прочитай. Если просьба неясна или небезопасна, задай один \
+    уточняющий вопрос или откажись и объясни почему. Закончив, коротко скажи, что сделано или что нашла.
+    """
+}
