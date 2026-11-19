@@ -593,6 +593,12 @@ public struct SceneBuilder: Sendable {
                 if now.timeIntervalSince(turns[index].endedAt) >= ttl.heardSettle { decide(index, .heard(reason: "not_addressed"), now) }
                 continue
             }
+            // Someone else, recognised by voice, is not the owner: his words never become a request, even when the owner was
+            // heard a minute ago (the scene keeps the owner "present" for a while, which must not open the door for guests).
+            if ttl.requireOwnerPresent, let speakerID = turns[index].speakerID, participants[speakerID]?.role == .human {
+                decide(index, .heard(reason: "other_person"), now)
+                continue
+            }
             // Without the owner in the scene a request is not handed over, however it is worded.
             if ttl.requireOwnerPresent, !ownerPresent(now) {
                 // "unconfirmed": there was some evidence for the owner but not enough; "absent": there was none.

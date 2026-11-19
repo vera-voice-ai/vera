@@ -411,7 +411,7 @@ public final class CoreAgent {
     public static let silenceMarker = "[молчу]"
     /// Offered only with a reply that came without her name: the model may stay silent when it is plainly not for her.
     /// It is not in the general prompt, so a request that reaches her by name or by a benchmark can never be answered with it.
-    static let silenceOption = "Это реплика без обращения по имени. Приветствия, вопросы и просьбы считай обращением к тебе и отвечай. Ответь ровно «[молчу]» и больше ничего, только если реплика бесспорно не тебе: пересказ видео или чужой разговор, обрывок фразы, звонок по телефону, слова себе под нос. Малейшее сомнение — отвечай как обычно."
+    static let silenceOption = "Это реплика без обращения по имени. Приветствия, вопросы и просьбы считай обращением к тебе и отвечай. Если в сцене рядом слышен другой человек и реплика похожа на разговор Алексея с ним (вопрос уместен человеку, в нём нет слов о тебе или твоих инструментах), это не тебе. Ответь ровно «[молчу]» и больше ничего, и решай это до первого слова, а не после ответа: только если реплика бесспорно не тебе: пересказ видео или чужой разговор, обрывок фразы, звонок по телефону, слова себе под нос. Малейшее сомнение — отвечай как обычно."
     static let wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
 
     /// The activation phrase: her name among the first three or the last three words of a reply, however long it is.
@@ -639,9 +639,17 @@ public final class CoreAgent {
                                                    "prompt_tokens": "\(result.usage.promptTokens)",
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))
-        let stayedSilent = result.succeeded && Self.isSilenceMarker(result.answer)
+        var stayedSilent = result.succeeded && Self.isSilenceMarker(result.answer)
+        // «Слова… [молчу]»: she decided late. The marker still means silence, and what was already queued is cut.
+        if !mustAnswer, result.succeeded, !stayedSilent, result.answer.lowercased().contains(Self.silenceMarker) {
+            stayedSilent = true
+            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                             type: "output.speech.stop", payload: ["reason": "silence_marker"]))
+        }
         if result.succeeded, !stayedSilent, result.answer.contains("?") { awaitingReplyUntil = clock().addingTimeInterval(Self.replyWindow) }
-        if mode == .ready || mode == .working { touch() }
+        // The window restarts after a finished task only when it was a real piece of work (named, or it used a tool): an
+        // answer to a stray remark must not keep her listening, or she answers the whole conversation around her.
+        if mode == .ready || mode == .working, mustAnswer || !result.toolCalls.isEmpty { touch() }
         if result.succeeded, !stayedSilent { memory?.recordTask(request: request, answer: result.answer) }
         if result.succeeded, !stayedSilent {
             // What the stream did not already cover: a tail without a full stop, or the whole answer when nothing streamed.
