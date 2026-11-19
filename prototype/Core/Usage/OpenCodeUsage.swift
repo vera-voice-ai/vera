@@ -15,10 +15,10 @@ public actor OpenCodeUsage {
         public let weekly: Window
         public let monthly: Window
 
-        /// "5ч 23% · нед 8% · мес 3%"
+        /// "23%/8%/3%": 5 hours / week / month. The windows are explained in the tooltip, not here.
         public var display: String {
             func p(_ w: Window) -> String { String(Int(w.percent.rounded())) + "%" }
-            return "5ч \(p(rolling)) · нед \(p(weekly)) · мес \(p(monthly))"
+            return "\(p(rolling))/\(p(weekly))/\(p(monthly))"
         }
     }
 

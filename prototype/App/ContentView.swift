@@ -105,10 +105,23 @@ struct ContentView: View {
 
     private var openCodeText: (text: String, help: String) {
         switch model.openCodeState {
-        case .unknown: return ("OpenCode Go —", "расход ещё не запрошен")
+        case .unknown: return ("OpenCode —", "расход ещё не запрошен")
         case .usage(let usage):
-            return ("OpenCode Go: \(usage.display)", "расход подписки: 5 часов, неделя, месяц. Сброс окон: \(usage.rolling.resetsAt) · \(usage.weekly.resetsAt) · \(usage.monthly.resetsAt)")
-        case .failed(let reason): return ("OpenCode Go —", reason)
+            return ("OpenCode \(usage.display)", "расход подписки OpenCode Go: 5 часов / неделя / месяц. Сброс окон: \(usage.rolling.resetsAt) · \(usage.weekly.resetsAt) · \(usage.monthly.resetsAt)")
+        case .failed(let reason): return ("OpenCode —", reason)
+        }
+    }
+
+    private var codexText: (text: String, help: String) {
+        switch model.codexState {
+        case .unknown: return ("Codex —", "лимиты ещё не запрошены")
+        case .limits(let limits):
+            func reset(_ window: CodexUsage.Window) -> String {
+                window.resetsAt.map { $0.formatted(.dateTime.day().month().hour().minute()) } ?? "неизвестно"
+            }
+            let plan = limits.planType.map { ", план \($0)" } ?? ""
+            return ("Codex \(limits.display)", "лимиты подписки Codex: 5 часов / неделя. Сброс: \(reset(limits.primary)) · \(reset(limits.secondary))\(plan)")
+        case .failed(let reason): return ("Codex —", reason)
         }
     }
 
@@ -117,6 +130,11 @@ struct ContentView: View {
             .font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(0.8)
             .foregroundStyle(.white.opacity(0.6))
             .help(help)
+    }
+
+    /// The thin divider between header items, in the same muted tone as the labels.
+    private var usageDivider: some View {
+        Rectangle().fill(.white.opacity(0.25)).frame(width: 1, height: 12)
     }
 
     private var header: some View {
@@ -130,9 +148,14 @@ struct ContentView: View {
                     .foregroundStyle(.white.opacity(0.91))
             }
             Spacer()
-            HStack(spacing: 16) {
-                usageLabel(deepSeekText.text, help: deepSeekText.help)
+            HStack(spacing: 10) {
                 usageLabel(openCodeText.text, help: openCodeText.help)
+                usageDivider
+                usageLabel(deepSeekText.text, help: deepSeekText.help)
+                usageDivider
+                usageLabel(codexText.text, help: codexText.help)
+                usageDivider
+                usageLabel(model.resources.headerText, help: model.resources.helpText)
             }
             HStack(spacing: 6) {
                 Circle().fill(model.isAnalyzing ? .orange : .green).frame(width: 7, height: 7)
