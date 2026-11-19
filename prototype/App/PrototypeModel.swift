@@ -194,12 +194,17 @@ final class PrototypeModel {
         let skillStore = SkillStore(directory: runtime.appSupportURL.appending(path: "Skills", directoryHint: .isDirectory))
         Self.seedSkills(in: skillStore.directory)
         let memory = MemoryStore(directory: runtime.appSupportURL.appending(path: "Memory", directoryHint: .isDirectory))
+        let commandApproval = CommandApproval(workingDirectory: workspace)
+        let reminders = ReminderStore(url: runtime.appSupportURL.appending(path: "Memory/reminders.json"))
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
-                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry).adding(skillStore.writeRegistry).adding(selfModifier.registry), systemPrompt: VeraPrompt.system) : nil,
+                                     tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry).adding(skillStore.writeRegistry).adding(selfModifier.registry)
+                                         .adding(WebTools.registry).adding(.commandTools(commandApproval)).adding(.reminderTools(reminders)), systemPrompt: VeraPrompt.system) : nil,
             unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
         self.agent.skills = skillStore
         self.agent.selfModifier = selfModifier
+        self.agent.commandApproval = commandApproval
+        self.agent.reminders = reminders
         self.agent.restartHandler = { NSApplication.shared.terminate(nil) }
         self.tape = AudioTape(directory: runtime.appSupportURL.appending(path: "Tape", directoryHint: .isDirectory))
         let gigaAMAnalyzer = GigaAMAnalyzer(runtime: runtime)

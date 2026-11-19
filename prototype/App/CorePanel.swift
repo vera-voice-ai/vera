@@ -107,7 +107,7 @@ struct CorePanel: View {
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
             Text("команды: «Вера, режим тишины» · «Вера, засыпай» · «стоп» отменяет задачу и речь")
                 .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
-            Text("инструменты: read_file, list_dir, write_file, replace_in_file, remember, search_memory, read_skill · голосом «стоп» отменяет задачу и речь")
+            Text("инструменты: файлы (read_file, list_dir, write_file, append_to_file, replace_in_file, delete_file), память, навыки, интернет (get_weather, web_search, fetch_url), run_command, напоминания · голосом «стоп» отменяет задачу и речь")
                 .font(.system(size: 9)).foregroundStyle(.white.opacity(0.42)).lineLimit(2)
         }
         .padding(.top, 4)

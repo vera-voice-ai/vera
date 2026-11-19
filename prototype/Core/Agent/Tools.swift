@@ -17,8 +17,8 @@ public struct ToolRegistry: Sendable {
     public init(_ tools: [any AgentTool]) { self.tools = tools }
     public var definitions: [ToolDefinition] { tools.map(\.definition) }
     /// Tools that change files. Runs in parallel share the folders, so these calls go through one lock; reads do not.
-    static let writeTools: Set<String> = ["write_file", "append_to_file", "replace_in_file", "write_skill",
-                                          "self_write_file", "self_append_to_file", "self_replace_in_file"]
+    static let writeTools: Set<String> = ["write_file", "append_to_file", "replace_in_file", "delete_file", "write_skill",
+                                          "self_write_file", "self_append_to_file", "self_replace_in_file", "self_delete_file"]
     private static let writeLock = NSLock()
 
     public func run(_ call: ToolCall) -> ToolResult {
@@ -41,7 +41,7 @@ public struct WorkspaceTools: Sendable {
     public init(root: URL) { self.root = root }
 
     public var registry: ToolRegistry {
-        ToolRegistry([ReadFileTool(box: self), ListDirectoryTool(box: self), WriteFileTool(box: self), AppendToFileTool(box: self), ReplaceInFileTool(box: self)])
+        ToolRegistry([ReadFileTool(box: self), ListDirectoryTool(box: self), WriteFileTool(box: self), AppendToFileTool(box: self), ReplaceInFileTool(box: self), DeleteFileTool(box: self)])
     }
 
     func resolve(_ path: String) -> URL? {
@@ -146,6 +146,32 @@ struct AppendToFileTool: AgentTool {
             try (existing + separator + line + "\n").write(to: url, atomically: true, encoding: .utf8)
             return ToolResult(ok: true, text: "added a line to \(path)")
         } catch { return ToolResult(ok: false, text: "cannot write: \(error.localizedDescription)") }
+    }
+}
+
+/// Deleting is a move into `.trash` inside the working folder: nothing is erased for good, and a mistake is one move back.
+struct DeleteFileTool: AgentTool {
+    let box: WorkspaceTools
+    var definition: ToolDefinition {
+        ToolDefinition(name: "delete_file", description: "Delete a file or a folder of the working folder. It is moved to .trash inside the working folder, not erased, so it can be brought back. Say what you deleted.",
+                       parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#)
+    }
+    func run(argumentsJSON: String) -> ToolResult {
+        guard let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String else { return ToolResult(ok: false, text: "bad arguments: need path") }
+        guard let url = box.resolve(path) else { return WorkspaceTools.outside }
+        let root = box.root.standardizedFileURL.resolvingSymlinksInPath().path
+        let target = url.standardizedFileURL.resolvingSymlinksInPath().path
+        if target == root { return ToolResult(ok: false, text: "refused: the working folder itself is not deleted") }
+        if target.hasPrefix(root + "/.trash") { return ToolResult(ok: false, text: "refused: it is already in the trash") }
+        guard FileManager.default.fileExists(atPath: url.path) else { return ToolResult(ok: false, text: "no file named \(path)" + box.suggestions(for: path)) }
+        let trash = box.root.appending(path: ".trash", directoryHint: .isDirectory)
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"; formatter.locale = Locale(identifier: "en_US_POSIX")
+        let destination = trash.appending(path: "\(formatter.string(from: Date()))-\(url.lastPathComponent)")
+        do {
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: url, to: destination)
+            return ToolResult(ok: true, text: "moved \(path) to .trash/\(destination.lastPathComponent)")
+        } catch { return ToolResult(ok: false, text: "cannot delete: \(error.localizedDescription)") }
     }
 }
 

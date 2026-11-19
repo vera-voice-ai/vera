@@ -57,6 +57,10 @@ public final class CoreAgent {
     public var skills: SkillStore?
     /// Silent: what is running is finished, but nothing is spoken aloud.
     public var isSilent: Bool { mode == .silent }
+    /// A shell command that waits for the owner's word «выполняй»; nil when she has no command tool.
+    public var commandApproval: CommandApproval?
+    /// What she was asked to do later (say it or run it as a task); nil when she has no reminders.
+    public var reminders: ReminderStore?
     /// Her own source and the gates a change to it passes; nil when she may not change herself.
     public var selfModifier: SelfModifier?
     /// Called after a confirmed change was built, when the app should quit so that the new build can start.
@@ -98,6 +102,7 @@ public final class CoreAgent {
             while !Swift.Task.isCancelled {
                 try? await Swift.Task.sleep(for: .seconds(1))
                 await self?.expireIfNeeded(bus: bus)
+                await self?.fireDueReminders(bus: bus)
             }
         }
         defer { ticker.cancel() }
@@ -153,6 +158,10 @@ public final class CoreAgent {
                 await applySelfChange(modifier, bus: bus)
                 continue
             }
+            if Self.isRunApproval(text), let approval = commandApproval, approval.hasPending {
+                await runApprovedCommand(approval, bus: bus, message: message, turnID: turnID)
+                continue
+            }
             if let change = Self.silenceCommand(text) {
                 await setMode(change ? .silent : .ready, bus: bus, reason: "command", causation: message.id,
                               announce: change ? Self.silencePhrase : Self.voiceBackPhrase)
@@ -173,23 +182,66 @@ public final class CoreAgent {
             }
             if mode == .silent { await setMode(.ready, bus: bus, reason: "activation", causation: message.id) }
             touch()
-            let id = Self.taskID(turnID: turnID)
-            enqueue(id: id, request: text, readyAt: message.timestamp)
-            await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.queued",
-                                            subjectID: id, causationID: message.id.uuidString.lowercased(),
-                                            payload: ["task_id": id]))
-            let key = UUID()
-            live[key] = Swift.Task { @MainActor in
-                if await self.runGate.acquire() {
-                    _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp,
-                                       note: note.isEmpty ? nil : note, mustAnswer: activation)
-                    await self.runGate.release()
-                } else {
-                    self.update(id) { $0.state = .cancelled }
-                }
-                self.live[key] = nil
+            await startTask(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp,
+                            note: note.isEmpty ? nil : note, mustAnswer: activation)
+        }
+    }
+
+    /// Lists the task at once ("queued") and runs it when a place is free.
+    private func startTask(request: String, turnID: String, bus: SignalBus?, causation: UUID?, readyAt: Date, note: String?, mustAnswer: Bool) async {
+        let id = Self.taskID(turnID: turnID)
+        enqueue(id: id, request: request, readyAt: readyAt)
+        await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.queued",
+                                         subjectID: id, causationID: causation?.uuidString.lowercased(), payload: ["task_id": id]))
+        let key = UUID()
+        live[key] = Swift.Task { @MainActor in
+            if await self.runGate.acquire() {
+                _ = await self.run(request: request, turnID: turnID, bus: bus, causation: causation, readyAt: readyAt, note: note, mustAnswer: mustAnswer)
+                await self.runGate.release()
+            } else {
+                self.update(id) { $0.state = .cancelled }
+            }
+            self.live[key] = nil
+        }
+    }
+
+    /// The owner said «выполняй» to a command that was waiting: run it, then let the model say what came of it.
+    private func runApprovedCommand(_ approval: CommandApproval, bus: SignalBus, message: SignalMessage, turnID: String) async {
+        guard let command = approval.take() else { return }
+        await bus.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                        type: "output.speech.requested", payload: ["text": Self.runningPhrase]))
+        let directory = approval.workingDirectory
+        let result = await Swift.Task.detached { ShellRunner.run(command, in: directory, timeout: 60) }.value
+        await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.command.ran",
+                                        causationID: message.id.uuidString.lowercased(),
+                                        payload: ["command": command, "code": "\(result.code)", "timed_out": "\(result.timedOut)"]))
+        let request = "Алексей разрешил выполнить команду «\(command)». Код возврата \(result.code)\(result.timedOut ? ", время вышло" : ""). Вывод:\n\(result.output)\nКоротко скажи, что получилось."
+        await startTask(request: request, turnID: turnID + "-command", bus: bus, causation: message.id, readyAt: message.timestamp, note: nil, mustAnswer: true)
+    }
+
+    /// Reminders whose time has come: said aloud (even in Silent, the owner asked for it), or run as a task. Asleep she waits.
+    public func fireDueReminders(bus: SignalBus?) async {
+        guard let reminders, mode != .sleep else { return }
+        for item in reminders.takeDue(now: clock()) {
+            await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.reminder.fired",
+                                             payload: ["id": item.id, "text": item.text, "as_task": "\(item.asTask)"]))
+            if item.asTask {
+                await startTask(request: item.text, turnID: "reminder-" + item.id, bus: bus, causation: nil, readyAt: clock(),
+                                note: "Это запланированная задача: Алексей просил выполнить её в это время.", mustAnswer: true)
+            } else {
+                await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                                 type: "output.speech.requested", payload: ["text": "Напоминаю: " + item.text]))
             }
         }
+    }
+
+    /// «выполняй», «да, запускай»: the owner lets a waiting command run.
+    public static func isRunApproval(_ text: String) -> Bool {
+        let filler: Set<String> = ["да", "вера", "вер", "ну", "давай", "пожалуйста", "ладно", "хорошо", "можно", "можешь"]
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init).filter { !filler.contains($0) }
+        guard (1...3).contains(words.count) else { return false }
+        let allowed: Set<String> = ["выполняй", "выполни", "выполнить", "запускай", "запусти", "запустить", "разрешаю", "делай"]
+        return words.allSatisfy { allowed.contains($0) }
     }
 
     /// Switches the mode, tells the bus (`core.mode.changed`, which the scene reads as a fact) and says `announce` if given.
@@ -269,6 +321,7 @@ public final class CoreAgent {
     public static let silencePhrase = "Режим тишины"
     public static let voiceBackPhrase = "Голос включён"
     public static let listeningPhrase = "Слушаю"
+    public static let runningPhrase = "Выполняю"
     /// The answer to a greeting alone ("Привет, Вера"): she greets back instead of only saying that she listens.
     public static let greetingPhrase = "Привет, Алексей"
 
