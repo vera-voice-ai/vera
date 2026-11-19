@@ -16,6 +16,7 @@ struct ResponsePanel: View {
                 Spacer()
                 Text("предложения по команде output.speech.requested от Core; output.speech.stop обрывает").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             }
+            Text(voiceLine).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
             Text("СКАЗАНО ВСЛУХ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
             if speaker.utterances.isEmpty {
                 Text("пока ничего не говорила").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))
@@ -32,6 +33,9 @@ struct ResponsePanel: View {
                                         .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
                                 }
                             }
+                            if let task = item.taskID {
+                                Text(task).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.4)).padding(.leading, 16)
+                            }
                             Text(item.text).lineLimit(2).truncationMode(.tail).font(.system(size: 10)).foregroundStyle(.white.opacity(0.7)).padding(.leading, 16)
                         }
                     }
@@ -39,6 +43,14 @@ struct ResponsePanel: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    /// Who holds the voice and how much is waiting behind the sentence being said.
+    private var voiceLine: String {
+        let speaking = speaker.utterances.first { $0.state == .speaking }
+        let waiting = speaker.utterances.filter { $0.state == .synthesizing }.count
+        let who = speaking.map { "говорит: \($0.taskID ?? "без задачи")" } ?? "голос свободен"
+        return "\(who) · синтез в очереди: \(waiting)"
     }
 
     private func icon(_ state: ResponseSpeaker.Utterance.State) -> String {

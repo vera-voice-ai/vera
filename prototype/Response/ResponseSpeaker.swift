@@ -31,6 +31,8 @@ public final class ResponseSpeaker {
         public var synthesisMilliseconds = 0
         public var speakingMilliseconds = 0
         public var error: String?
+        /// The run whose answer this sentence belongs to; nil for speech not started by a task.
+        public var taskID: String?
         public let requestedAt = Date()
     }
 
@@ -83,7 +85,9 @@ public final class ResponseSpeaker {
                                              subjectID: id, correlationID: id, causationID: id,
                                              payload: payload.merging(["voice": voice, "task_id": taskID ?? ""]) { a, _ in a }))
         }
-        utterances.insert(Utterance(id: id, text: text), at: 0)
+        var entry = Utterance(id: id, text: text)
+        entry.taskID = taskID
+        utterances.insert(entry, at: 0)
         if utterances.count > 20 { utterances.removeLast(utterances.count - 20) }
         if isMuted {
             update(id) { $0.state = .failed; $0.error = "muted" }

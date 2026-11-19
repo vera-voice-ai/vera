@@ -69,7 +69,7 @@ struct CorePanel: View {
             if agent.tasks.isEmpty {
                 Text("задач ещё не было").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))
             } else {
-                Text(Self.load(agent.tasks)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
+                Text(Self.load(agent.tasks, voice: agent.voiceTaskID)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
                 VStack(alignment: .leading, spacing: 5) {
                     ForEach(agent.tasks.prefix(6)) { task in
                         VStack(alignment: .leading, spacing: 1) {
@@ -142,10 +142,11 @@ struct CorePanel: View {
         }
     }
 
-    private static func load(_ tasks: [CoreAgent.Task]) -> String {
+    private static func load(_ tasks: [CoreAgent.Task], voice: String?) -> String {
         let running = tasks.filter { $0.state == .running }.count
         let queued = tasks.filter { $0.state == .queued }.count
-        return "идут: \(running) · в очереди: \(queued) · одновременно не больше \(CoreAgent.maxParallelTasks)"
+        let holder = voice.map { "голос у \($0)" } ?? "голос свободен"
+        return "идут: \(running) · в очереди: \(queued) (не больше \(CoreAgent.maxParallelTasks)) · \(holder)"
     }
 
     /// Where the time went, in the order it is spent: queue, scene question, first token, the rest of the model and tools, speech.

@@ -300,6 +300,8 @@ public struct SceneBuilder: Sendable {
     private var lastHandedOverAt: Date?
     /// When Vera spoke: (start, end), end nil while she still does. Her voice reaching the microphone must not become a request.
     private var ownSpeech: [(start: Date, end: Date?)] = []
+    /// When her last sentence ended: the owner's follow-up window counts from here, not from the hand-over.
+    private var lastOwnSpeechEnd: Date?
     private var lastOwnerSeenAt: Date?
     private var lastOwnerConfirmedAt: Date?
     private var lastHeardAt: Date?
@@ -323,6 +325,7 @@ public struct SceneBuilder: Sendable {
             case "output.speech.started": ownSpeech.append((message.timestamp, nil))
             case "output.speech.ended", "output.speech.failed":
                 if let index = ownSpeech.lastIndex(where: { $0.end == nil }) { ownSpeech[index].end = message.timestamp }
+                lastOwnSpeechEnd = message.timestamp
             default: break
             }
             if ownSpeech.count > 20 { ownSpeech.removeFirst(ownSpeech.count - 20) }
@@ -587,7 +590,8 @@ public struct SceneBuilder: Sendable {
     private func addressed(_ turn: SceneTurn, _ now: Date) -> Addressed {
         let words = Self.words(turn.text)
         if words.contains(where: { ttl.wakeWords.contains($0) }) { return .likely }
-        if let handed = lastHandedOverAt, now.timeIntervalSince(handed) <= ttl.engagedWindow,
+        let anchor = [lastHandedOverAt, lastOwnSpeechEnd].compactMap { $0 }.max()
+        if let anchor, now.timeIntervalSince(anchor) <= ttl.engagedWindow,
            turn.speakerID != "unknown" { return .possible }
         return .unlikely
     }

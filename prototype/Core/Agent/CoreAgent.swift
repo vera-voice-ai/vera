@@ -63,6 +63,8 @@ public final class CoreAgent {
     public static let maxParallelTasks = 3
     /// Speech is one voice: a task holds the speech lane from its first sentence to its last, so answers never overlap.
     private let speechLane = Lane(capacity: 1)
+    /// The run that holds the voice right now, for the panel; nil when the voice is free.
+    public private(set) var voiceTaskID: String?
     /// Raised by "стоп": sentences produced before the stop are dropped, even when they still wait for the speech lane.
     private var speechGeneration = 0
     /// Every task started and not yet finished, so that "стоп" can cancel them all.
@@ -284,6 +286,7 @@ public final class CoreAgent {
                 if !holdsVoice {
                     guard await self.speechLane.acquire() else { continue }
                     holdsVoice = true
+                    self.voiceTaskID = id
                     if generation != self.speechGeneration { continue }
                 }
                 index += 1
@@ -291,7 +294,10 @@ public final class CoreAgent {
                                                  type: "output.speech.requested", subjectID: id, correlationID: id,
                                                  payload: ["text": sentence, "task_id": id, "part": "\(index)"]))
             }
-            if holdsVoice { await self.speechLane.release() }
+            if holdsVoice {
+                if self.voiceTaskID == id { self.voiceTaskID = nil }
+                await self.speechLane.release()
+            }
         }
         let streams = streamsSpeech && bus != nil
         let result = await loop.run(request: request, context: context) { [weak self] event in
