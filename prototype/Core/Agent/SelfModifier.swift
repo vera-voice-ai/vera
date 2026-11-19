@@ -123,7 +123,7 @@ struct SelfFileTool: AgentTool {
     let modifier: SelfModifier
     var definition: ToolDefinition {
         let d = inner.definition
-        return ToolDefinition(name: "self_" + d.name, description: "[ТВОЙ СОБСТВЕННЫЙ КОД, отдельная копия] " + d.description, parametersJSON: d.parametersJSON)
+        return ToolDefinition(name: "self_" + d.name, description: "[СВОЙ КОД, копия] " + d.description, parametersJSON: d.parametersJSON)
     }
     func run(argumentsJSON: String) -> ToolResult {
         guard modifier.prepare() else { return ToolResult(ok: false, text: "the copy of the source is not available") }
@@ -145,7 +145,7 @@ struct SelfFileTool: AgentTool {
 struct SelfTestTool: AgentTool {
     let modifier: SelfModifier
     var definition: ToolDefinition {
-        ToolDefinition(name: "self_test", description: "Run the whole test suite of your own source copy (takes minutes). A change can only be committed after this passes.",
+        ToolDefinition(name: "self_test", description: "Run the test suite of your own copy (minutes). Commit only after it passes.",
                        parametersJSON: #"{"type":"object","properties":{}}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { modifier.test() }
@@ -154,7 +154,7 @@ struct SelfTestTool: AgentTool {
 struct SelfCommitTool: AgentTool {
     let modifier: SelfModifier
     var definition: ToolDefinition {
-        ToolDefinition(name: "self_commit", description: "Commit your edits to your own branch. Refused unless self_test passed after the last edit.",
+        ToolDefinition(name: "self_commit", description: "Commit your edits to your own branch; refused unless self_test passed after the last edit.",
                        parametersJSON: #"{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -166,8 +166,8 @@ struct SelfCommitTool: AgentTool {
 struct SelfApplyTool: AgentTool {
     let modifier: SelfModifier
     var definition: ToolDefinition {
-        ToolDefinition(name: "self_apply", description: "Ask the owner to let you switch to your changed code and restart. It does not apply anything by itself: the owner must say «применяй».",
-                       parametersJSON: #"{"type":"object","properties":{"summary":{"type":"string","description":"What changed, in one sentence"}},"required":["summary"]}"#)
+        ToolDefinition(name: "self_apply", description: "Ask the owner to switch to your changed code and restart; it applies only after he says «применяй».",
+                       parametersJSON: #"{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
         guard let args = WorkspaceTools.arguments(argumentsJSON), let summary = args["summary"] as? String else { return ToolResult(ok: false, text: "bad arguments: need summary") }
@@ -179,7 +179,7 @@ struct SelfApplyTool: AgentTool {
 struct WriteSkillTool: AgentTool {
     let store: SkillStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "write_skill", description: "Create or update one of your skills: a short procedure you will see in the skill list next time. Use it when you learned a better way to do a kind of task.",
+        ToolDefinition(name: "write_skill", description: "Create or update one of your skills: a short procedure for a kind of task, shown in the skill list later.",
                        parametersJSON: #"{"type":"object","properties":{"name":{"type":"string","description":"latin letters, digits and dashes"},"description":{"type":"string","description":"one line: when to use it"},"body":{"type":"string"}},"required":["name","description","body"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {

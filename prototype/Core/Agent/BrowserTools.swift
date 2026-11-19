@@ -116,7 +116,7 @@ private func intArgument(_ args: [String: Any], _ key: String) -> Int? { (args[k
 struct BrowserOpenTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_open", description: "Open a page in your own browser window (a real browser: JavaScript works). Returns the text and numbered links, buttons and fields.",
+        ToolDefinition(name: "browser_open", description: "Open a page in your browser window (JavaScript works). Returns the text and numbered links, buttons and fields.",
                        parametersJSON: #"{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
@@ -132,7 +132,7 @@ struct BrowserOpenTool: AgentTool {
 struct BrowserSearchTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_search", description: "Search in Google in your browser window and read the result page. Open a result with browser_open or click it by its number.",
+        ToolDefinition(name: "browser_search", description: "Search Google in your browser window and read the results. Open one with browser_open or browser_click.",
                        parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
@@ -155,7 +155,7 @@ struct BrowserSearchTool: AgentTool {
 struct BrowserReadTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_read", description: "Read the page that is open now (text and numbered elements) again, for example after the owner did something in the window.",
+        ToolDefinition(name: "browser_read", description: "Read the open page again (text and numbered elements), e.g. after the owner acted in the window.",
                        parametersJSON: #"{"type":"object","properties":{}}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
@@ -165,7 +165,7 @@ struct BrowserReadTool: AgentTool {
 struct BrowserClickTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_click", description: "Click a link or button of the page by its number. Signing in, paying, ordering, sending and deleting are not yours to click: the owner does these himself in the window.",
+        ToolDefinition(name: "browser_click", description: "Click a link or button by its number. Never sign in, pay, order, send or delete: the owner does those himself in the window.",
                        parametersJSON: #"{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
@@ -180,7 +180,7 @@ struct BrowserClickTool: AgentTool {
 struct BrowserTypeTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_type", description: "Type text into a field by its number. With submit true it also presses Enter, which is allowed only for search fields. Passwords and card data are never typed by you.",
+        ToolDefinition(name: "browser_type", description: "Type into a field by its number; submit true also presses Enter, only in search fields. Never type passwords or card data.",
                        parametersJSON: #"{"type":"object","properties":{"id":{"type":"integer"},"text":{"type":"string"},"submit":{"type":"boolean"}},"required":["id","text"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
@@ -197,7 +197,7 @@ struct BrowserTypeTool: AgentTool {
 
 struct BrowserBackTool: AgentTool {
     let session: BrowserSession
-    var definition: ToolDefinition { ToolDefinition(name: "browser_back", description: "Go back one page in the browser window.", parametersJSON: #"{"type":"object","properties":{}}"#) }
+    var definition: ToolDefinition { ToolDefinition(name: "browser_back", description: "Go back one page.", parametersJSON: #"{"type":"object","properties":{}}"#) }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
     func runAsync(argumentsJSON: String) async -> ToolResult { session.describe(await session.driver.back()) }
 }
@@ -205,7 +205,7 @@ struct BrowserBackTool: AgentTool {
 struct BrowserCloseTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_close", description: "Close the browser window and drop the page. The owner's logins stay in the browser, so the next browser_open opens it again with them. Do it when you are done with the browser or the owner asks.",
+        ToolDefinition(name: "browser_close", description: "Close the browser window and drop the page; logins stay. Do it when done or when the owner asks.",
                        parametersJSON: #"{"type":"object","properties":{}}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }

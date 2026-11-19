@@ -114,7 +114,7 @@ public final class MemoryStore: @unchecked Sendable {
 struct RememberTool: AgentTool {
     let memory: MemoryStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "remember", description: "Save one short fact the owner asked to remember (a preference, a name, a decision). It stays after restarts and is shown to you in later tasks.",
+        ToolDefinition(name: "remember", description: "Save one short fact the owner asked to remember (a preference, a name, a decision); it survives restarts.",
                        parametersJSON: #"{"type":"object","properties":{"fact":{"type":"string","description":"One self-contained sentence"}},"required":["fact"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -126,7 +126,7 @@ struct RememberTool: AgentTool {
 struct SearchMemoryTool: AgentTool {
     let memory: MemoryStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "search_memory", description: "Search what the owner asked to remember and the earlier tasks (requests and answers) by words. Use it when the owner refers to something from before.",
+        ToolDefinition(name: "search_memory", description: "Search remembered facts and earlier tasks by words; use it when the owner refers to the past.",
                        parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {

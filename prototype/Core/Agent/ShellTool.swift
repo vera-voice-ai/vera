@@ -149,7 +149,7 @@ struct RunCommandTool: AgentTool {
     let approval: CommandApproval
 
     var definition: ToolDefinition {
-        ToolDefinition(name: "run_command", description: "Run a shell command in the working folder. Harmless read-only commands run at once. Anything else is NOT run: it waits for the owner, so tell him aloud what you want to run and ask him to say «выполняй». Some commands never run. Output and time are limited.",
+        ToolDefinition(name: "run_command", description: "Run a shell command in the working folder. Read-only commands run at once; any other waits for the owner\'s «выполняй», so tell him aloud first. Some never run. Output and time are limited.",
                        parametersJSON: #"{"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","description":"Up to 60, default 30"}},"required":["command"]}"#)
     }
 
