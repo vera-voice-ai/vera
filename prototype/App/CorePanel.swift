@@ -69,18 +69,18 @@ struct CorePanel: View {
             if agent.tasks.isEmpty {
                 Text("задач ещё не было").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))
             } else {
+                Text(Self.load(agent.tasks)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
                 VStack(alignment: .leading, spacing: 5) {
-                    ForEach(agent.tasks.prefix(3)) { task in
+                    ForEach(agent.tasks.prefix(6)) { task in
                         VStack(alignment: .leading, spacing: 1) {
                             HStack(spacing: 6) {
-                                Image(systemName: task.state == .running ? "hourglass" : (task.state == .done ? "checkmark.circle.fill" : "xmark.circle.fill"))
-                                    .font(.system(size: 10)).foregroundStyle(task.state == .done ? .green : (task.state == .failed ? .red : .orange))
+                                Image(systemName: Self.icon(task.state)).font(.system(size: 10)).foregroundStyle(Self.tint(task.state))
                                 Text(task.request).lineLimit(1).truncationMode(.tail).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.88))
                                 Spacer(minLength: 6)
-                                Text(task.state == .running ? "идёт…" : "\(task.toolCalls.count) инстр. · \(task.steps) запр. · \(Double(task.totalMilliseconds) / 1000, format: .number.precision(.fractionLength(1))) с")
+                                Text(Self.trailing(task))
                                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
                             }
-                            if task.state != .running || task.speechStartMilliseconds != nil {
+                            if task.state == .done || task.state == .failed || task.speechStartMilliseconds != nil {
                                 Text(stagesText(task)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.42)).padding(.leading, 16)
                             }
                             if !task.answer.isEmpty || task.error != nil {
@@ -110,6 +110,42 @@ struct CorePanel: View {
                 .font(.system(size: 9)).foregroundStyle(.white.opacity(0.42)).lineLimit(2)
         }
         .padding(.top, 4)
+    }
+
+    private static func icon(_ state: CoreAgent.Task.State) -> String {
+        switch state {
+        case .queued: return "clock"
+        case .running: return "hourglass"
+        case .done: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        case .cancelled: return "stop.circle"
+        }
+    }
+
+    private static func tint(_ state: CoreAgent.Task.State) -> Color {
+        switch state {
+        case .queued: return .gray
+        case .running: return .orange
+        case .done: return .green
+        case .failed: return .red
+        case .cancelled: return .white.opacity(0.5)
+        }
+    }
+
+    private static func trailing(_ task: CoreAgent.Task) -> String {
+        switch task.state {
+        case .queued: return "в очереди"
+        case .running: return task.speechStartMilliseconds == nil ? "идёт…" : "говорит"
+        case .cancelled: return "отменено"
+        case .done, .failed:
+            return "\(task.toolCalls.count) инстр. · \(task.steps) запр. · \(String(format: "%.1f", Double(task.totalMilliseconds) / 1000)) с"
+        }
+    }
+
+    private static func load(_ tasks: [CoreAgent.Task]) -> String {
+        let running = tasks.filter { $0.state == .running }.count
+        let queued = tasks.filter { $0.state == .queued }.count
+        return "идут: \(running) · в очереди: \(queued) · одновременно не больше \(CoreAgent.maxParallelTasks)"
     }
 
     /// Where the time went, in the order it is spent: queue, scene question, first token, the rest of the model and tools, speech.

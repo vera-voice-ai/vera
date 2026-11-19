@@ -189,7 +189,7 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     #expect(await eventually { agent.tasks.first?.state == .running })
     await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
                                     payload: ["turn_id": "turn/b", "text": "Вера, стоп", "addressed": "likely"]))
-    #expect(await eventually { agent.tasks.first?.state == .failed })
+    #expect(await eventually { agent.tasks.first?.state == .cancelled })
     #expect(agent.tasks.first?.error == "cancelled")
     #expect(await eventually { collector.messages.contains { $0.type == "output.speech.stop" } })
 }
@@ -213,7 +213,7 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     #expect(await eventually { agent.tasks.first?.state == .running })
     await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.heard",
                                     payload: ["turn_id": "turn/b", "text": "Stop.", "addressed": "no", "reason": "not_addressed"]))
-    #expect(await eventually { agent.tasks.first?.state == .failed })
+    #expect(await eventually { agent.tasks.first?.state == .cancelled })
 }
 
 // MARK: - Silence mode

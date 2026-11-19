@@ -16,9 +16,17 @@ public struct ToolRegistry: Sendable {
     public let tools: [any AgentTool]
     public init(_ tools: [any AgentTool]) { self.tools = tools }
     public var definitions: [ToolDefinition] { tools.map(\.definition) }
+    /// Tools that change files. Runs in parallel share the folders, so these calls go through one lock; reads do not.
+    static let writeTools: Set<String> = ["write_file", "append_to_file", "replace_in_file", "write_skill",
+                                          "self_write_file", "self_append_to_file", "self_replace_in_file"]
+    private static let writeLock = NSLock()
+
     public func run(_ call: ToolCall) -> ToolResult {
         guard let tool = tools.first(where: { $0.definition.name == call.name }) else {
             return ToolResult(ok: false, text: "unknown tool \(call.name)")
+        }
+        if Self.writeTools.contains(call.name) {
+            return Self.writeLock.withLock { tool.run(argumentsJSON: call.arguments) }
         }
         return tool.run(argumentsJSON: call.arguments)
     }

@@ -204,7 +204,7 @@ private actor Overlap {
     func leave() { running -= 1 }
 }
 
-@MainActor @Test func tasksHeardCloseTogetherRunOneAtATime() async {
+@MainActor @Test func tasksHeardCloseTogetherRunInParallelUpToTheLimit() async {
     struct SlowModel: ChatModel {
         let overlap: Overlap
         func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
@@ -221,11 +221,12 @@ private actor Overlap {
     let task = Task { await agent.consume(bus) }
     defer { task.cancel() }
     try? await Task.sleep(for: .milliseconds(150))
-    for n in 1...3 {
+    for n in 1...4 {
         await bus.publish(SignalMessage(domain: .scene, source: "Scene.Builder", type: "scene.turn.ready",
                                         payload: ["turn_id": "turn/\(n)", "text": "Вера, сделай \(n)", "addressed": "likely"]))
     }
-    for _ in 0..<100 where agent.tasks.filter({ $0.state == .done }).count < 3 { try? await Task.sleep(for: .milliseconds(50)) }
-    #expect(agent.tasks.filter { $0.state == .done }.count == 3)
-    #expect(await overlap.maximum == 1)
+    for _ in 0..<100 where agent.tasks.filter({ $0.state == .done }).count < 4 { try? await Task.sleep(for: .milliseconds(50)) }
+    #expect(agent.tasks.filter { $0.state == .done }.count == 4)
+    let peak = await overlap.maximum
+    #expect(peak >= 2 && peak <= CoreAgent.maxParallelTasks)
 }

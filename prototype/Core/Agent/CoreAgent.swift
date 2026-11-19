@@ -15,7 +15,7 @@ final class Locked<Value>: @unchecked Sendable {
 @Observable
 public final class CoreAgent {
     public struct Task: Identifiable, Sendable {
-        public enum State: Sendable { case running, done, failed }
+        public enum State: Sendable { case queued, running, done, failed, cancelled }
         public let id: String
         public let request: String
         public var state: State = .running
@@ -58,8 +58,13 @@ public final class CoreAgent {
     private let loop: AgentLoop?
     private var handled: Set<String> = []
     private var pendingScene: [String: CheckedContinuation<String?, Never>] = [:]
-    /// Tasks run one at a time, in the order heard: two of them editing the same folder at once would race.
-    private var queueTail: Swift.Task<Void, Never>?
+    /// At most `maxParallelTasks` tasks run at once; the rest wait in the order heard.
+    private let runGate = Lane(capacity: CoreAgent.maxParallelTasks)
+    public static let maxParallelTasks = 3
+    /// Speech is one voice: a task holds the speech lane from its first sentence to its last, so answers never overlap.
+    private let speechLane = Lane(capacity: 1)
+    /// Raised by "стоп": sentences produced before the stop are dropped, even when they still wait for the speech lane.
+    private var speechGeneration = 0
     /// Every task started and not yet finished, so that "стоп" can cancel them all.
     private var live: [UUID: Swift.Task<Void, Never>] = [:]
     /// Ask the scene for the situation and pass it to the model with every task.
@@ -115,17 +120,21 @@ public final class CoreAgent {
                 await setSilent(change, bus: bus, causation: message.id)
                 continue
             }
-            let previous = queueTail
+            let id = Self.taskID(turnID: turnID)
+            enqueue(id: id, request: text, readyAt: message.timestamp)
+            await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.queued",
+                                            subjectID: id, causationID: message.id.uuidString.lowercased(),
+                                            payload: ["task_id": id]))
             let key = UUID()
-            let work = Swift.Task { @MainActor in
-                await previous?.value
-                if !Swift.Task.isCancelled {
+            live[key] = Swift.Task { @MainActor in
+                if await self.runGate.acquire() {
                     _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp)
+                    await self.runGate.release()
+                } else {
+                    self.update(id) { $0.state = .cancelled }
                 }
                 self.live[key] = nil
             }
-            live[key] = work
-            queueTail = work
         }
     }
 
@@ -192,7 +201,12 @@ public final class CoreAgent {
     public func cancelAll(bus: SignalBus?, reason: String) async {
         for work in live.values { work.cancel() }
         live.removeAll()
-        queueTail = nil
+        speechGeneration += 1
+        // Waiting tasks end here; running ones end when their loop returns "cancelled" (see `run`).
+        for index in tasks.indices where tasks[index].state == .queued {
+            tasks[index].state = .cancelled
+            tasks[index].error = "cancelled"
+        }
         await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.tasks.cancelled",
                                          payload: ["reason": reason]))
         await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
@@ -238,12 +252,12 @@ public final class CoreAgent {
             var result = AgentResult(); result.error = unavailableReason
             return result
         }
-        let id = "task/\(turnID?.replacingOccurrences(of: "turn/", with: "") ?? UUID().uuidString.prefix(8).lowercased())"
-        var task = Task(id: id, request: request)
-        task.readyAt = readyAt ?? task.startedAt
-        task.queueMilliseconds = max(0, Int(task.startedAt.timeIntervalSince(task.readyAt) * 1000))
-        tasks.insert(task, at: 0)
-        if tasks.count > 20 { tasks.removeLast(tasks.count - 20) }
+        let id = Self.taskID(turnID: turnID)
+        if !tasks.contains(where: { $0.id == id }) { enqueue(id: id, request: request, readyAt: readyAt ?? Date()) }
+        update(id) {
+            $0.state = .running
+            $0.queueMilliseconds = max(0, Int(Date().timeIntervalSince($0.readyAt) * 1000))
+        }
         await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.started",
                                          subjectID: id, causationID: causation?.uuidString.lowercased(),
                                          payload: ["task_id": id, "request_chars": "\(request.count)"]))
@@ -256,19 +270,28 @@ public final class CoreAgent {
         // The answer is spoken sentence by sentence as it is written, one command per sentence, in order.
         let chunker = Locked(SpeechChunker())
         let (sentences, sink) = AsyncStream<String>.makeStream()
+        let generation = speechGeneration
         let speaker = Swift.Task { @MainActor in
             var index = 0
+            var holdsVoice = false
             for await sentence in sentences {
                 if self.isSilent {
                     await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.speech.suppressed",
                                                      subjectID: id, payload: ["task_id": id, "chars": "\(sentence.count)"]))
                     continue
                 }
+                if generation != self.speechGeneration { continue }
+                if !holdsVoice {
+                    guard await self.speechLane.acquire() else { continue }
+                    holdsVoice = true
+                    if generation != self.speechGeneration { continue }
+                }
                 index += 1
                 await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
                                                  type: "output.speech.requested", subjectID: id, correlationID: id,
                                                  payload: ["text": sentence, "task_id": id, "part": "\(index)"]))
             }
+            if holdsVoice { await self.speechLane.release() }
         }
         let streams = streamsSpeech && bus != nil
         let result = await loop.run(request: request, context: context) { [weak self] event in
@@ -284,7 +307,7 @@ public final class CoreAgent {
             }
         }
         update(id) {
-            $0.state = result.succeeded ? .done : .failed
+            $0.state = result.succeeded ? .done : (result.error == "cancelled" ? .cancelled : .failed)
             $0.answer = result.answer
             $0.steps = result.steps
             $0.totalMilliseconds = result.totalMilliseconds
@@ -311,6 +334,19 @@ public final class CoreAgent {
         sink.finish()
         await speaker.value
         return result
+    }
+
+    static func taskID(turnID: String?) -> String {
+        "task/\(turnID?.replacingOccurrences(of: "turn/", with: "") ?? UUID().uuidString.prefix(8).lowercased())"
+    }
+
+    /// A task that waits for a place: listed at once, so the owner sees what is heard and not yet started.
+    private func enqueue(id: String, request: String, readyAt: Date) {
+        var task = Task(id: id, request: request)
+        task.state = .queued
+        task.readyAt = readyAt
+        tasks.insert(task, at: 0)
+        if tasks.count > 20 { tasks.removeLast(tasks.count - 20) }
     }
 
     private func update(_ id: String, _ change: (inout Task) -> Void) {
