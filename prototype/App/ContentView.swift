@@ -432,10 +432,18 @@ struct ContentView: View {
                     }
                     .frame(height: 4)
                 }
-                HStack(alignment: .bottom, spacing: 4) {
-                    ForEach(Array(model.smartTurnHistory.enumerated()), id: \.offset) { _, value in
-                        Capsule().fill((value >= 0.9 ? Color.green : (value >= 0.5 ? Color.orange : Color.red)).opacity(0.8))
-                            .frame(width: 8, height: 2 + 12 * CGFloat(min(1, max(0, value))))
+                // Eight fixed slots, the newest on the right: a short history leaves faint empty slots instead of a few stray pills.
+                HStack(alignment: .bottom, spacing: 3) {
+                    ForEach(0..<8, id: \.self) { slot in
+                        let offset = slot - (8 - model.smartTurnHistory.count)
+                        if offset >= 0 {
+                            let value = model.smartTurnHistory[offset]
+                            Capsule().fill((value >= 0.9 ? Color.green : (value >= 0.5 ? Color.orange : Color.red)).opacity(0.8))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 2 + 12 * CGFloat(min(1, max(0, value))))
+                        } else {
+                            Capsule().fill(.white.opacity(0.08)).frame(maxWidth: .infinity).frame(height: 2)
+                        }
                     }
                 }
                 .frame(height: 16, alignment: .bottom)
