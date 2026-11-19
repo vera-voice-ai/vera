@@ -247,9 +247,29 @@ final class PrototypeModel {
             liveVoxLockAnalyzer = VoxLockAnalyzer(runtime: runtime, ownerVoiceSample: targetVoice)
         }
         try? runtime.createRuntimeDirectories()
+        // The judge of "has he finished the thought": the fast brain (reads the text, needs the DeepSeek key), then local Jev.
+        let hasFastBrain = Secrets.keychainKey(named: "DEEPSEEK_API_KEY") != nil
         if runtime.jevAvailable {
-            scene.judge = JevTurnJudge(analyzer: jevAnalyzer)
-            scene.judgeName = "Jev-Style-2B v4 · MLX 8 бит"
+            let jev = JevTurnJudge(analyzer: jevAnalyzer)
+            scene.judge = hasFastBrain ? FallbackJudge(judges: [FastBrainJudge(), jev]) : jev
+            scene.judgeName = hasFastBrain ? "DeepSeek Flash → Jev-Style-2B v4" : "Jev-Style-2B v4 · MLX 8 бит"
+        } else if hasFastBrain {
+            scene.judge = FastBrainJudge()
+            scene.judgeName = "DeepSeek Flash"
+        }
+        // Early hand-overs (a continuation within seconds) are written down: the data to compare the judges on.
+        let handoffLog = runtime.appSupportURL.appending(path: "Recordings/early-handoffs.jsonl")
+        Task { @MainActor [weak self] in
+            guard let bus = self?.bus else { return }
+            for await message in await bus.subscribe() where message.type == "scene.turn.premature" {
+                var line = (try? JSONSerialization.data(withJSONObject: ["at": ISO8601DateFormatter().string(from: .now), "turn": message.payload["turn_id"] ?? "",
+                                                                         "text": message.payload["text"] ?? "", "gap_ms": message.payload["gap_ms"] ?? "",
+                                                                         "judge": self?.scene.judgeName ?? ""])) ?? Data()
+                line.append(0x0A)
+                try? FileManager.default.createDirectory(at: handoffLog.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if let handle = try? FileHandle(forWritingTo: handoffLog) { try? handle.seekToEnd(); try? handle.write(contentsOf: line); try? handle.close() }
+                else { try? line.write(to: handoffLog) }
+            }
         }
         Task { await busMonitor.consume(bus) }
         Task { await core.consume(bus) }

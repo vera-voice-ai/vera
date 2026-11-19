@@ -92,6 +92,7 @@ public final class SceneModel {
     }
 
     private func accept(_ snapshot: SceneSnapshot, bus: SignalBus) async {
+        let earlierPremature = self.snapshot?.content.prematureHandovers ?? 0
         self.snapshot = snapshot
         snapshots.insert(snapshot, at: 0)
         if snapshots.count > 50 { snapshots.removeLast(snapshots.count - 50) }
@@ -100,6 +101,13 @@ public final class SceneModel {
                                         revision: snapshot.revision,
                                         causationID: snapshot.causes.last?.uuidString.lowercased(),
                                         payload: snapshot.payload))
+        // A continuation right after a hand-over: the turn went to Core too early. Recorded as an event so that the judges can be compared.
+        if snapshot.content.prematureHandovers > earlierPremature, let turnID = snapshot.content.lastPrematureTurnID {
+            await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "Scene.Builder", type: "scene.turn.premature", subjectID: turnID,
+                                            payload: ["turn_id": turnID, "text": snapshot.content.lastPrematureText ?? "",
+                                                      "gap_ms": String(snapshot.content.lastPrematureGapMilliseconds ?? 0),
+                                                      "total": String(snapshot.content.prematureHandovers)]))
+        }
         for turn in snapshot.decisions {
             let isReady: Bool
             let why: String

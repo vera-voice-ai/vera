@@ -88,6 +88,12 @@ public struct SceneTTL: Sendable {
     /// (ROC-AUC 0.60) and at 0.9 would have cut 61 % of the continuing speakers off. The earlier 93 % on finished
     /// segments mostly reflected the 2 s of silence at their end. Turn on only after validation on labelled data.
     public var turnEndShortcut = false
+    /// A judge that says "unfinished" with at least this confidence keeps the turn open for `confidentContinueHold` seconds of
+    /// silence instead of `maxHold`. Above 1 means never (the default); the app turns it on for the fast-brain judge.
+    public var confidentContinue = 2.0
+    public var confidentContinueHold: TimeInterval = 8
+    /// A new utterance this soon after a hand-over means the turn was handed over too early (counted, to measure the judges).
+    public var prematureWindow: TimeInterval = 6
     /// How long after Vera stops speaking the room still carries her voice (reverb, a late echo).
     public var speechTail: TimeInterval = 1.5
     /// The mode the scene assumes until Core says otherwise (`core.mode.changed`). The app starts in "ready"; replays of
@@ -243,6 +249,11 @@ public struct SceneContent: Sendable, Equatable {
     public var participants: [SceneParticipant] = []
     /// The channel the owner is writing through right now (a text message within `participantPresence`), for example "telegram".
     public var ownerChannel: String?
+    /// How many times a continuation started within `prematureWindow` after a hand-over, and the latest such case.
+    public var prematureHandovers = 0
+    public var lastPrematureTurnID: String?
+    public var lastPrematureText: String?
+    public var lastPrematureGapMilliseconds: Int?
 
     public init() {}
 }
@@ -328,6 +339,10 @@ public struct SceneBuilder: Sendable {
     /// activation phrase counts. A fact the scene is told, not a decision it takes.
     private var coreMode: String
     private var lastOwnerSeenAt: Date?
+    /// The last voice turn handed to Core, to notice a continuation that comes right after (a premature hand-over).
+    private var lastReady: (turnID: String, text: String, at: Date, counted: Bool)?
+    private var prematureHandovers = 0
+    private var lastPremature: (turnID: String, text: String, gapMilliseconds: Int)?
     /// The last text message of the owner and the channel it came through.
     private var lastTextChannel: (name: String, at: Date)?
     private var lastOwnerConfirmedAt: Date?
@@ -414,6 +429,11 @@ public struct SceneBuilder: Sendable {
             lastTextChannel = (channel, time)
             pendingDecisions.append(turn)
         case "speech.segment.started":
+            if let ready = lastReady, !ready.counted, time.timeIntervalSince(ready.at) <= ttl.prematureWindow, time >= ready.at {
+                prematureHandovers += 1
+                lastPremature = (ready.turnID, ready.text, Int(time.timeIntervalSince(ready.at) * 1000))
+                lastReady?.counted = true
+            }
             guard let id = message.subjectID, !utterances.contains(where: { $0.id == id }) else { return nil }
             utterances.append(SceneUtterance(id: id, state: .active, text: "", textIsFinal: false,
                                              textRevision: 0, startedAt: time, endedAt: nil))
@@ -623,7 +643,7 @@ public struct SceneBuilder: Sendable {
                 turns[index].needsVerdict = false
                 if verdict.choice == "complete" {
                     decide(index, .ready(basis: "jev"), now)
-                } else if now.timeIntervalSince(turns[index].endedAt) >= ttl.maxHold {
+                } else if now.timeIntervalSince(turns[index].endedAt) >= (verdict.confidence >= ttl.confidentContinue ? max(ttl.maxHold, ttl.confidentContinueHold) : ttl.maxHold) {
                     decide(index, .ready(basis: "hold_expired"), now)
                 }
             } else {
@@ -640,7 +660,10 @@ public struct SceneBuilder: Sendable {
         turns[index].decidedAt = now
         turns[index].needsVerdict = false
         measureLoudness(index)
-        if case .ready = state { lastHandedOverAt = now } else { lastHeardAt = now }
+        if case .ready = state {
+            lastHandedOverAt = now
+            lastReady = (turns[index].id, turns[index].text, now, false)
+        } else { lastHeardAt = now }
         pendingDecisions.append(turns[index])
     }
 
@@ -836,6 +859,10 @@ public struct SceneBuilder: Sendable {
         content.turns = turns.sorted { $0.endedAt > $1.endedAt }
         content.status = status(now)
         if let last = lastTextChannel, now.timeIntervalSince(last.at) <= ttl.participantPresence { content.ownerChannel = last.name }
+        content.prematureHandovers = prematureHandovers
+        content.lastPrematureTurnID = lastPremature?.turnID
+        content.lastPrematureText = lastPremature?.text
+        content.lastPrematureGapMilliseconds = lastPremature?.gapMilliseconds
         content.participants = participants.values.sorted {
             $0.lastHeard != $1.lastHeard ? $0.lastHeard > $1.lastHeard : $0.id < $1.id
         }
@@ -848,6 +875,7 @@ public struct SceneBuilder: Sendable {
         if old.microphoneOn != new.microphoneOn { names.append("microphone") }
         if old.sound != new.sound { names.append("sound") }
         if old.ownerChannel != new.ownerChannel { names.append("owner_channel") }
+        if old.prematureHandovers != new.prematureHandovers { names.append("premature_handover") }
         if old.owner != new.owner || old.ownerMean != new.ownerMean { names.append("owner_activity") }
         if old.active != new.active { names.append("utterance") }
         if old.recent != new.recent { names.append("recent") }
@@ -867,6 +895,9 @@ public extension SceneTTL {
         ttl.requireOwnerPresent = true
         // Jev answered "continue" for two thirds of finished turns on real data: do not let it hold a turn long.
         ttl.maxHold = 3
+        // The fast brain reads the text and is sure the thought goes on: wait for the rest (it merges into the same turn).
+        ttl.confidentContinue = 0.85
+        ttl.confidentContinueHold = 8
         // The gate closes after ~1 s of silence; background talk waits 2 s for a continuation before it is filed.
         ttl.heardSettle = 2
         return ttl
