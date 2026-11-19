@@ -48,6 +48,8 @@ public final class CoreAgent {
     public var workingWindow: TimeInterval = 600
     /// The current time; tests replace it to run the timers without waiting.
     public var clock: () -> Date = { Date() }
+    /// The automations the owner can switch off (panel or voice). All on by default.
+    public var switches = AutomationSwitches()
     private var activityAt = Date()
     /// Speak each sentence as soon as the model has written it, instead of the whole answer at the end.
     public var streamsSpeech = true
@@ -144,6 +146,7 @@ public final class CoreAgent {
             // A short reply to her own question: the scene filed it as "not addressed" (a one-word voice is not recognisable).
             if isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.heard",
                let until = awaitingReplyUntil, clock() < until, mode == .ready || mode == .working,
+               switches.isOn(AutomationSwitches.replyWindow),
                message.payload["reason"] == "not_addressed", let heardID = message.payload["turn_id"],
                (1...4).contains((message.payload["text"] ?? "").split(whereSeparator: { !$0.isLetter }).count),
                firstTime(heardID) {
@@ -173,9 +176,12 @@ public final class CoreAgent {
                 guard activation || Self.runsAsTask(addressed: message.payload["addressed"] ?? "") else { continue }
             }
             let text = Self.stripAddress(rawText)
-            let note = [Self.modeNote(mode, readyWindow: readyWindow, workingWindow: workingWindow),
+            let silenceNote: String? = activation ? "К тебе обратились по имени: отвечай, молчать нельзя."
+                : (switches.isOn(AutomationSwitches.silenceOption) ? Self.silenceOption : nil)
+            let note = [Self.modeNote(mode, readyWindow: readyWindow, workingWindow: workingWindow,
+                                      timers: switches.isOn(AutomationSwitches.modeTimers)),
                         Self.loudnessNote(loudness, aboveFloor: aboveFloor),
-                        activation ? "К тебе обратились по имени: отвечай, молчать нельзя." : Self.silenceOption]
+                        silenceNote]
                 .compactMap { $0 }.joined(separator: " ")
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
             if Self.isStopCommand(text) {
@@ -188,6 +194,18 @@ public final class CoreAgent {
             }
             if Self.isRunApproval(text), let approval = commandApproval, approval.hasPending {
                 await runApprovedCommand(approval, bus: bus, message: message, turnID: turnID)
+                continue
+            }
+            // "выключи тихие часы" and its opposite: the owner switches one automation, and she says so.
+            if let change = Self.switchCommand(text) {
+                switches.set(change.id, change.on)
+                await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.automation.switched",
+                                                 causationID: message.id.uuidString.lowercased(),
+                                                 payload: ["id": change.id, "on": "\(change.on)"]))
+                await bus.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                                 type: "output.speech.requested", causationID: message.id.uuidString.lowercased(),
+                                                 payload: ["text": Self.switchAnnouncement(id: change.id, on: change.on)]))
+                touch()
                 continue
             }
             if let change = Self.silenceCommand(text) {
@@ -336,8 +354,11 @@ public final class CoreAgent {
     }
 
     /// Ready and Working run out to Silent when the owner has said nothing for the whole window and nothing is running.
+    /// With the mode timers switched off they stay until a command changes them.
     public func expireIfNeeded(bus: SignalBus?) async {
         guard mode == .ready || mode == .working else { return }
+        // The clock keeps restarting while the timers are off, so switching them on gives a full window from that moment.
+        guard switches.isOn(AutomationSwitches.modeTimers) else { touch(); return }
         if tasks.contains(where: { $0.state == .running || $0.state == .queued }) { touch(); return }
         guard let deadline = modeDeadline, clock() >= deadline else { return }
         await setMode(.silent, bus: bus, reason: "timer", announce: Self.silencePhrase)
@@ -411,6 +432,41 @@ public final class CoreAgent {
     /// True when the whole answer is the silence marker (the brackets and the case do not matter).
     public static func isSilenceMarker(_ answer: String) -> Bool {
         answer.lowercased().filter(\.isLetter) == "молчу"
+    }
+
+    /// «выключи тихие часы» → (quiet.hours, false); «включи окно ответа» → (reply.window, true); nil for anything else.
+    /// The verb must come first (after the filler words), and the object must be one of the four switch names.
+    public static func switchCommand(_ text: String) -> (id: String, on: Bool)? {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard (2...6).contains(words.count) else { return nil }
+        let fillers: Set<String> = ["вера", "вер", "пожалуйста", "ну", "давай", "теперь", "ладно", "а", "уже"]
+        let rest = words.filter { !fillers.contains($0) }
+        guard let verb = rest.first else { return nil }
+        let on: Bool
+        if ["включи", "включить", "включай", "включите"].contains(verb) { on = true }
+        else if ["выключи", "выключить", "выключай", "выключите", "отключи", "отключить", "отключай"].contains(verb) { on = false }
+        else { return nil }
+        let object = rest.dropFirst().joined(separator: " ")
+        let objects: [(id: String, names: [String])] = [
+            (AutomationSwitches.quietHours, ["тихие часы", "тихих часов"]),
+            (AutomationSwitches.modeTimers, ["таймеры режимов", "таймер режимов", "таймеры"]),
+            (AutomationSwitches.silenceOption, ["вариант молчу", "молчу"]),
+            (AutomationSwitches.replyWindow, ["окно ответа", "окно ответа на вопрос"]),
+        ]
+        guard let match = objects.first(where: { $0.names.contains(object) }) else { return nil }
+        return (match.id, on)
+    }
+
+    /// What she says after a switch command: «Тихие часы выключены», «Вариант молчу включён».
+    public static func switchAnnouncement(id: String, on: Bool) -> String {
+        let names: [String: (name: String, on: String, off: String)] = [
+            AutomationSwitches.quietHours: ("Тихие часы", "включены", "выключены"),
+            AutomationSwitches.modeTimers: ("Таймеры режимов", "включены", "выключены"),
+            AutomationSwitches.silenceOption: ("Вариант молчу", "включён", "выключен"),
+            AutomationSwitches.replyWindow: ("Окно ответа", "включено", "выключено"),
+        ]
+        guard let entry = names[id] else { return on ? "Включено" : "Выключено" }
+        return "\(entry.name) \(on ? entry.on : entry.off)"
     }
 
     /// true = go silent, false = speak again, nil = not a mode command. Short imperatives only, so that a sentence
@@ -618,11 +674,13 @@ public final class CoreAgent {
     }
 
     /// What the model is told about the mode she is in, so that she describes herself correctly.
-    public static func modeNote(_ mode: VeraMode, readyWindow: TimeInterval, workingWindow: TimeInterval) -> String? {
+    public static func modeNote(_ mode: VeraMode, readyWindow: TimeInterval, workingWindow: TimeInterval, timers: Bool = true) -> String? {
         switch mode {
         case .ready:
+            if !timers { return "Режим сейчас «Готовность»: ты отвечаешь без имени; по времени в «Тишину» ты не уходишь, таймер выключен." }
             return "Режим сейчас «Готовность»: ты отвечаешь без имени; если Алексей молчит \(Int(readyWindow)) с, ты сама уходишь в «Тишину» и говоришь «Режим тишины»."
         case .working:
+            if !timers { return "Режим сейчас «В работе»: ты отвечаешь без имени; по времени в «Тишину» ты не уходишь, таймер выключен." }
             return "Режим сейчас «В работе»: ты отвечаешь без имени; после \(Int(workingWindow / 60)) мин без его реплик ты сама уходишь в «Тишину»."
         case .silent, .sleep:
             return nil

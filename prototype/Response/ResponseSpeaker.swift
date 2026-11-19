@@ -67,6 +67,8 @@ public final class ResponseSpeaker {
     public var isMuted = false
     public let voice: String
     public var quietHours = QuietHours()
+    /// Whether the quiet-hours automation is on. The app sets it from the switches (Response cannot import Core).
+    public var quietHoursOn: () -> Bool = { true }
     /// The current time; tests replace it.
     public var clock: () -> Date = { Date() }
     /// Playback speed: 1.0 is as synthesized, 1.05 is 5 % faster. Read for every sentence, so a change is heard at once.
@@ -141,7 +143,7 @@ public final class ResponseSpeaker {
         update(id) { $0.state = .speaking; $0.synthesisMilliseconds = synthesisMs }
         await publish("output.speech.started", ["synthesis_ms": "\(synthesisMs)", "chars": "\(text.count)"])
         let playStart = ContinuousClock.now
-        do { try await player.play(wav: wav, rate: Float(speed), volume: volume * quietHours.level(at: clock())) } catch {
+        do { try await player.play(wav: wav, rate: Float(speed), volume: volume * (quietHoursOn() ? quietHours.level(at: clock()) : 1)) } catch {
             update(id) { $0.state = .failed; $0.error = "\(error)" }
             await publish("output.speech.failed", ["reason": "playback", "error": "\(error)"])
             return
