@@ -214,7 +214,7 @@ final class PrototypeModel {
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
                                      tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry).adding(skillStore.writeRegistry).adding(selfModifier.registry)
-                                         .adding(WebTools.registry).adding(.browserTools(BrowserSession(driver: browser))).adding(.commandTools(commandApproval)).adding(.macTools).adding(.noteTools(notes)).adding(.familyOSTools())
+                                         .adding(WebTools.registry).adding(.browserTools(BrowserSession(driver: browser))).adding(.commandTools(commandApproval)).adding(.macTools).adding(.noteTools(notes)).adding(.familyOSTools()).adding(.engineTools(workspace: workspace, board: ToolRunBoard(bus: bus)))
                                          .adding(.taskTools { await MainActor.run { agentBox.agent?.statusText() ?? "" } }).adding(.reminderTools(reminders)), systemPrompt: VeraPrompt.system) : nil,
             unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
         self.agent.skills = skillStore
