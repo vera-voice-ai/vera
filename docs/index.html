@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-<header class="topbar"><a class="brand" href="#top"><span class="brand-mark">V</span><span>VERA <small>/ 0.1.1</small></span></a><span class="top-label">ЕДИНАЯ АРХИТЕКТУРНАЯ ДОКУМЕНТАЦИЯ</span><span class="meta">NOV 2026 · DESIGN 0.3</span></header>
+<header class="topbar"><a class="brand" href="#top"><span class="brand-mark">V</span><span>VERA <small>/ 0.1.2</small></span></a><span class="top-label">ЕДИНАЯ АРХИТЕКТУРНАЯ ДОКУМЕНТАЦИЯ</span><span class="meta">NOV 2026 · DESIGN 0.3</span></header>
 <div class="layout" id="top">
   <aside class="sidebar" aria-label="Навигация">
     <div class="side-label">ПРОЕКТ</div><div class="project"><span class="dot"></span> Vera 2 · архитектура</div>
@@ -36,7 +36,7 @@
         </div>
       </details>
       <a href="#adr"><span class="num">03</span> Журнал архитектурных решений</a>
-      <a href="#changelog"><span class="num">04</span> Журнал изменений · 0.1.1</a>
+      <a href="#changelog"><span class="num">04</span> Журнал изменений · 0.1.2</a>
     </nav>
     <div class="side-label nav-section-label">ПРОРАБОТКА</div>
     <nav class="nav" aria-label="Дополнительные материалы">
@@ -409,6 +409,13 @@
 
     <h2 id="changelog">Журнал изменений и версии</h2>
     <p>Версия живёт в одном месте: <code>prototype/SignalBus/VeraRelease.swift</code>. Скрипт <code>bundle.sh</code> проставляет её в Info.plist, а заголовок окна показывает её. Нумерация <code>MAJOR.MINOR.PATCH</code>: до 1.0 новые возможности поднимают MINOR, исправления — PATCH. Каждый релиз — тег <code>vX.Y.Z</code> в ветке и архив <code>prototype/dist/Vera-X.Y.Z.zip</code> из <code>release.sh</code> (он сначала гоняет тесты). Новые записи добавляются сюда сверху, в том же коммите, что и изменение.</p>
+    <h3 id="release-0-1-2">0.1.2 · 19 ноября 2026 · Телеграм и правки «Ушей»</h3>
+    <ul>
+      <li>Канал Телеграм (бот <code>@veragovoritbot</code>): сообщение владельца превращается в событие <code>sensors.text.received</code> (<code>authenticated: true</code>, подлинность по Telegram id, а не по голосу), Core выполняет задачу, ответ уходит сообщением в тот же чат. Если владелец говорил с Верой голосом за последние 10 минут, ответ ещё и озвучивается.</li>
+      <li>Привязка: пока владелец не привязан, окно показывает одноразовый код, и тот, кто пришлёт его боту, становится владельцем. Остальные игнорируются без ответа. Id владельца и смещение очереди хранятся в <code>~/Library/Application Support/VeraSensorPrototype/Telegram/state.json</code> (права 0600). Старая очередь при первом запуске пропускается.</li>
+      <li>Токен бота и ключ DeepSeek лежат в Keychain (<code>space.vera.v2</code>, учётные записи <code>TELEGRAM_BOT_TOKEN</code> и <code>DEEPSEEK_API_KEY</code>). Канал запускается только с <code>--agent</code>, тестовой копии можно запретить его флагом <code>--no-telegram</code>, чтобы два экземпляра не делили очередь бота.</li>
+      <li>Блок «Уши»: убрана дорожка с уровнями рядом с кнопкой микрофона (из заметки Алексея, продиктованной Вере в <code>bugs.md</code>), спектрограмма стала ярче.</li>
+    </ul>
     <h3 id="release-0-1-1">0.1.1 · 19 ноября 2026 · лимит шагов и команды чтения</h3>
     <ul>
       <li>Лимит шагов агента поднят с 8 до 24. На последнем шаге инструменты отключаются, и Вера отвечает по тому, что успела выяснить, вместо молчаливой ошибки «step limit reached».</li>

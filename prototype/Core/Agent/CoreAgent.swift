@@ -93,6 +93,11 @@ public final class CoreAgent {
     private var live: [UUID: Swift.Task<Void, Never>] = [:]
     /// Ask the scene for the situation and pass it to the model with every task.
     public var includesSceneContext = true
+    /// The last time the owner's voice produced a request. Owner near the computer = this was recent.
+    var lastOwnerVoiceAt: Date?
+    /// How long after a voice request the owner counts as sitting next to Vera (seconds).
+    static let ownerNearWindow: TimeInterval = 600
+
     /// How long a task waits for the scene's answer before going on without context.
     public var sceneTimeout: TimeInterval = 1.5
 
@@ -153,8 +158,15 @@ public final class CoreAgent {
                                 note: "Это короткий ответ Алексея на твой вопрос.", mustAnswer: false)
                 continue
             }
+            // A text message of the paired owner (Telegram): authenticated by the channel, so no voice or scene check applies.
+            if isEnabled, message.domain == .sensors, message.kind == .event, message.type == "sensors.text.received",
+               message.payload["authenticated"] == "true", let textTurnID = message.payload["turn_id"], firstTime(textTurnID) {
+                await handleText(message, turnID: textTurnID, bus: bus)
+                continue
+            }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
                   let turnID = message.payload["turn_id"], firstTime(turnID) else { continue }
+            lastOwnerVoiceAt = clock()
             let rawText = message.payload["text"] ?? ""
             let activation = Self.isActivation(rawText)
             let loudness = message.payload["loudness_relative"] ?? ""
@@ -210,8 +222,25 @@ public final class CoreAgent {
         }
     }
 
+    /// The owner wrote to Vera (Telegram). The answer goes back as a message and is also spoken when he is next to her.
+    private func handleText(_ message: SignalMessage, turnID: String, bus: SignalBus) async {
+        let text = (message.payload["text"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if Self.isStopCommand(text) { await cancelAll(bus: bus, reason: "text"); return }
+        if Self.isApplyCommand(text), let modifier = selfModifier, modifier.hasPendingApply { await applySelfChange(modifier, bus: bus); return }
+        if Self.isRunApproval(text), let approval = commandApproval, approval.hasPending {
+            await runApprovedCommand(approval, bus: bus, message: message, turnID: turnID)
+            return
+        }
+        let near = lastOwnerVoiceAt.map { clock().timeIntervalSince($0) < Self.ownerNearWindow } ?? false
+        let note = "Алексей пишет тебе в Телеграм текстом. Ответ уйдёт ему сообщением" + (near ? ", и ещё прозвучит вслух: он рядом." : ".")
+            + " Отвечай по делу, можно подробнее, чем голосом, без разметки."
+        await startTask(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp, note: note, mustAnswer: true, speaks: near)
+    }
+
     /// Lists the task at once ("queued") and runs it when a place is free.
-    private func startTask(request: String, turnID: String, bus: SignalBus?, causation: UUID?, readyAt: Date, note: String?, mustAnswer: Bool) async {
+    private func startTask(request: String, turnID: String, bus: SignalBus?, causation: UUID?, readyAt: Date, note: String?, mustAnswer: Bool,
+                           speaks: Bool = true) async {
         let id = Self.taskID(turnID: turnID)
         enqueue(id: id, request: request, readyAt: readyAt)
         await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.queued",
@@ -219,7 +248,7 @@ public final class CoreAgent {
         let key = UUID()
         live[key] = Swift.Task { @MainActor in
             if await self.runGate.acquire() {
-                _ = await self.run(request: request, turnID: turnID, bus: bus, causation: causation, readyAt: readyAt, note: note, mustAnswer: mustAnswer)
+                _ = await self.run(request: request, turnID: turnID, bus: bus, causation: causation, readyAt: readyAt, note: note, mustAnswer: mustAnswer, speaks: speaks)
                 await self.runGate.release()
             } else {
                 self.update(id) { $0.state = .cancelled }
@@ -458,7 +487,7 @@ public final class CoreAgent {
     /// Runs one task. Also the entry point for benchmarks.
     @discardableResult
     public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil, readyAt: Date? = nil,
-                    note: String? = nil, mustAnswer: Bool = false) async -> AgentResult {
+                    note: String? = nil, mustAnswer: Bool = false, speaks: Bool = true) async -> AgentResult {
         guard let loop else {
             var result = AgentResult(); result.error = unavailableReason
             return result
@@ -487,6 +516,7 @@ public final class CoreAgent {
             var index = 0
             var holdsVoice = false
             for await sentence in sentences {
+                if !speaks { continue }
                 if self.isSilent {
                     await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.speech.suppressed",
                                                      subjectID: id, payload: ["task_id": id, "chars": "\(sentence.count)"]))

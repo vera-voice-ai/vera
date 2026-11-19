@@ -142,11 +142,6 @@ struct ContentView: View {
                         .accessibilityValue(model.isMicrophoneListening ? "Включён" : "Выключен")
                         .accessibilityHint("Включает или выключает потоковый захват микрофона")
                         .disabled(model.isMicrophoneStarting)
-                        waveformView(model.microphoneWaveform)
-                            .frame(minWidth: 180, maxWidth: 250)
-                            .frame(height: 42)
-                            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white.opacity(0.06), lineWidth: 1))
                         Spacer(minLength: 0)
                         Circle().fill(model.isMicrophoneListening ? .green : .white.opacity(0.25)).frame(width: 7, height: 7)
                     }
@@ -166,6 +161,9 @@ struct ContentView: View {
                         }
                     }
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.52))
+                    if !model.telegramStatus.isEmpty {
+                        Text(model.telegramStatus).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.52)).textSelection(.enabled)
+                    }
                     if model.recordingFileName != nil {
                         HStack(spacing: 7) {
                             Circle().fill(model.isMicrophoneListening ? .red : .white.opacity(0.25)).frame(width: 6, height: 6)
@@ -251,12 +249,14 @@ struct ContentView: View {
                 guard (0...5).contains(age), frame.bandsDBFS.count == LiveSpectrumAnalyzer.bandCount else { continue }
                 let x = size.width * CGFloat(1 - age / 5)
                 for (band, dbfs) in frame.bandsDBFS.enumerated() {
-                    let strength = CGFloat(max(0, min(1, (dbfs + 90) / 90)))
+                    // Brighter than before: a narrower dB window and a gamma below one lift quiet speech out of the dark.
+                    let linear = CGFloat(max(0, min(1, (dbfs + 80) / 62)))
+                    let strength = pow(linear, 0.7)
                     guard strength > 0 else { continue }
-                    let color = Color(red: 0.3 + 0.7 * strength,
-                                      green: 0.03 + 0.13 * strength,
-                                      blue: 0.28 + 0.62 * strength,
-                                      opacity: 0.12 + 0.88 * strength)
+                    let color = Color(red: 0.42 + 0.58 * strength,
+                                      green: 0.06 + 0.30 * strength,
+                                      blue: 0.40 + 0.60 * strength,
+                                      opacity: 0.22 + 0.78 * strength)
                     let rect = CGRect(x: x - columnWidth, y: size.height - CGFloat(band + 1) * bandHeight,
                                       width: columnWidth + 1, height: bandHeight + 0.4)
                     context.fill(Path(rect), with: .color(color))
@@ -522,32 +522,6 @@ struct ContentView: View {
                 .lineLimit(2).textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func waveformView(_ samples: [Float]) -> some View {
-        Canvas { context, size in
-            guard !samples.isEmpty else {
-                var idle = Path()
-                idle.move(to: CGPoint(x: 0, y: size.height / 2))
-                idle.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-                context.stroke(idle, with: .color(accent.opacity(0.28)), lineWidth: 1)
-                return
-            }
-            let middle = size.height / 2
-            var path = Path()
-            let count = max(1, samples.count - 1)
-            for (index, sample) in samples.enumerated() {
-                let x = size.width * CGFloat(index) / CGFloat(count)
-                let y = middle - CGFloat(max(-1, min(1, sample))) * (size.height * 0.43)
-                if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                else { path.addLine(to: CGPoint(x: x, y: y)) }
-            }
-            context.stroke(path, with: .color(accent), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-            var baseline = Path()
-            baseline.move(to: CGPoint(x: 0, y: middle))
-            baseline.addLine(to: CGPoint(x: size.width, y: middle))
-            context.stroke(baseline, with: .color(accent.opacity(0.18)), lineWidth: 1)
-        }
     }
 
     private func analyzerActivity(_ name: String, sources: [String], live: Bool) -> some View {

@@ -133,6 +133,8 @@ final class PrototypeModel {
     var isMicrophoneListening = false
     var microphoneAECActive: Bool?
     var microphoneStatus = "Микрофон выключен"
+    /// Telegram channel: pairing code while unpaired, then "connected". Empty without a token.
+    var telegramStatus = ""
     var microphoneWaveform: [Float] = []
     var microphoneRMS: Float = 0
     var microphonePeak: Float = 0
@@ -236,6 +238,23 @@ final class PrototypeModel {
         Task { await busMonitor.consume(bus) }
         Task { await core.consume(bus) }
         Task { await agent.consume(bus) }
+        // Telegram: only the instance that runs the agent (`--agent`) polls the bot, and a test copy can opt out with
+        // `--no-telegram`, because two pollers of one bot would fight over the updates. The token comes from the Keychain.
+        let launchArguments = CommandLine.arguments
+        if launchArguments.contains("--agent"), !launchArguments.contains("--no-telegram"),
+           let token = Secrets.key(named: "TELEGRAM_BOT_TOKEN") {
+            let telegram = TelegramChannel(token: token, stateURL: runtime.appSupportURL.appending(path: "Telegram/state.json"))
+            Task { await telegram.run(bus: bus) }
+            Task { @MainActor [weak self] in
+                guard let bus = self?.bus else { return }
+                for await message in await bus.subscribe() where message.type == "sensors.telegram.status" {
+                    let bot = (message.payload["bot"] ?? "").isEmpty ? "" : "@" + (message.payload["bot"] ?? "")
+                    self?.telegramStatus = message.payload["state"] == "paired"
+                        ? "Telegram \(bot) · подключён"
+                        : "Telegram \(bot) · привязка: отправь боту код \(message.payload["code"] ?? "")"
+                }
+            }
+        }
         Task { await speaker.consume(bus) }
         // Core asks Sensors to stop the microphone when she goes to sleep; switching it on again wakes her.
         Task { @MainActor [weak self] in
