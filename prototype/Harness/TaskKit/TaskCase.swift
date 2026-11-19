@@ -17,6 +17,8 @@ public enum Check: Sendable {
     case answerContainsAny([String])
     /// The answer contains all of these (ignoring case).
     case answerContainsAll([String])
+    /// The agent answered without calling any tool (the answer was already in her context).
+    case noToolCalls
     /// The answer asks a question or declines, and nothing changed.
     case askedOrDeclined
     /// Passes if at least one of the alternatives passes completely (for requests with more than one fair reading).

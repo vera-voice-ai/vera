@@ -4,6 +4,11 @@ public extension Suite {
     /// 24 synthetic tasks phrased the way the owner speaks (fillers, self-corrections, clipped names, ASR-like slips).
     /// Written fresh from a statistical profile of live speech; no real phrase or content is used.
     static let spoken: [TaskCase] = [
+        // Her own changelog is in her context: such questions are answered from it, without looking for a file.
+        TaskCase(id: "K01", category: "own_context", spoken: "Вера, расскажи, что у тебя нового, какие последние обновления?",
+                 checks: [.noToolCalls, .answerContainsAny(["телеграм", "codex", "песочниц", "быстр", "контекст", "инструмент", "истори"])]),
+        TaskCase(id: "K02", category: "own_context", spoken: "ну покажи мне историю своих последних изменений из ченджлога",
+                 checks: [.noToolCalls, .answerContainsAny(["телеграм", "codex", "песочниц", "быстр", "контекст", "инструмент", "истори"])]),
         TaskCase(id: "R01", category: "read_line", spoken: "Вера, прочитай вторую строку из notes.txt.",
                  checks: [.answerContainsAny(["сокол"])]),
         TaskCase(id: "R02", category: "read_line", spoken: "ну открой notes.txt и скажи, что в третьей строке",
@@ -41,7 +46,7 @@ public extension Suite {
         TaskCase(id: "N03", category: "create_file", spoken: "сделай новый файл empty.txt, ну пустой, без строк",
                  checks: [.fileEquals(path: "empty.txt", content: "")]),
         TaskCase(id: "F01", category: "count_find", spoken: "Вера, сколько раз слово тест встречается в status.txt",
-                 checks: [.answerContainsAny(["1", "один", "раз"])]),
+                 checks: [.answerContainsAny(["1", "один", "одно", "раз"])]),
         TaskCase(id: "F02", category: "count_find", spoken: "в каком файле есть слово сокол",
                  checks: [.answerContainsAny(["notes"])]),
         TaskCase(id: "F03", category: "count_find", spoken: "посчитай, сколько слов во второй строке notes.txt",

@@ -40,7 +40,7 @@ public final class TaskRunner {
             agent.setEnabled(true)
             log("→ \(task.id)")
             let result = await agent.run(request: task.spoken, bus: bus)
-            let failed = Self.evaluate(task.checks, sandbox: sandbox, answer: result.answer)
+            let failed = Self.evaluate(task.checks, sandbox: sandbox, answer: result.answer, toolCalls: result.toolCalls.count)
             outcomes.append(TaskOutcome(id: task.id, category: task.category, passed: result.error == nil && failed.isEmpty,
                                         failedChecks: failed, steps: result.steps, toolCalls: result.toolCalls.count,
                                         firstTokenMilliseconds: result.firstTokenMilliseconds, totalMilliseconds: result.totalMilliseconds,
@@ -56,7 +56,7 @@ public final class TaskRunner {
         return flat.count > 160 ? String(flat.prefix(160)) + "…" : flat
     }
 
-    public nonisolated static func evaluate(_ checks: [Check], sandbox: URL, answer: String) -> [String] {
+    public nonisolated static func evaluate(_ checks: [Check], sandbox: URL, answer: String, toolCalls: Int = 0) -> [String] {
         func read(_ path: String) -> String? { try? String(contentsOf: sandbox.appending(path: path), encoding: .utf8) }
         func lines(_ text: String) -> [String] { text.split(separator: "\n", omittingEmptySubsequences: true).map { $0.trimmingCharacters(in: .whitespaces).lowercased() } }
         let lowered = answer.lowercased()
@@ -76,12 +76,14 @@ public final class TaskRunner {
                 if read(path) != Fixtures.files[path] { failures.append("changed \(path)") }
             case .nothingChanged:
                 if !Self.untouched(sandbox) { failures.append("files changed") }
+            case .noToolCalls:
+                if toolCalls > 0 { failures.append("called a tool, the answer was in the context") }
             case let .answerContainsAny(words):
                 if !words.contains(where: { lowered.contains($0.lowercased()) }) { failures.append("answer lacks expected") }
             case let .answerContainsAll(words):
                 if !words.allSatisfy({ lowered.contains($0.lowercased()) }) { failures.append("answer lacks expected") }
             case let .anyOf(alternatives):
-                let results = alternatives.map { evaluate($0, sandbox: sandbox, answer: answer) }
+                let results = alternatives.map { evaluate($0, sandbox: sandbox, answer: answer, toolCalls: toolCalls) }
                 if !results.contains(where: \.isEmpty) { failures.append("no acceptable reading satisfied") }
             case .askedOrDeclined:
                 if !Self.untouched(sandbox) { failures.append("files changed") }

@@ -102,17 +102,25 @@ public final class CoreAgent {
     public var sceneTimeout: TimeInterval = 1.5
 
     /// `loop` is nil when no model is configured (for example no key): the agent then reports why instead of acting.
-    public init(loop: AgentLoop?, unavailableReason: String? = nil, memory: MemoryStore? = nil) {
+    /// `startMode` is the mode after launch. The app starts in `.silent`: right after a restart the owner is usually still
+    /// talking to someone else, so she waits for her name (ADR-013, decision of 19 November 2026). Tests start in `.ready`.
+    public init(loop: AgentLoop?, unavailableReason: String? = nil, memory: MemoryStore? = nil, startMode: VeraMode = .ready) {
         self.loop = loop
         self.memory = memory
         self.unavailableReason = loop == nil ? (unavailableReason ?? "no model configured") : nil
-        self.modeDeadline = activityAt.addingTimeInterval(readyWindow)
+        self.mode = startMode
+        self.modeDeadline = startMode == .ready ? activityAt.addingTimeInterval(readyWindow) : nil
     }
 
     public func setEnabled(_ enabled: Bool) { isEnabled = enabled && loop != nil }
 
     public func consume(_ bus: SignalBus) async {
         let stream = await bus.subscribe()
+        // The scene reads the mode as a fact and assumes Ready until told otherwise: say the starting mode once.
+        if mode != .ready {
+            await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.mode.changed",
+                                            payload: ["mode": mode.rawValue, "previous": mode.rawValue, "reason": "startup"]))
+        }
         // Without new evidence nothing arrives, so a timer lets Ready and Working run out.
         let ticker = Swift.Task { @MainActor [weak self] in
             while !Swift.Task.isCancelled {

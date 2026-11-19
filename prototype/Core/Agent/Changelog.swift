@@ -12,6 +12,8 @@ public enum VeraChangelog {
 
     /// Newest first.
     public static let entries: [Entry] = [
+        Entry(version: "0.1.8", date: "19 ноября 2026",
+              notes: "после запуска ты в режиме тишины и ждёшь своё имя; на вопросы про ченджлог отвечаешь из этого блока."),
         Entry(version: "0.1.7", date: "19 ноября 2026",
               notes: "у тебя два сильных инструмента, codex и claude (медленные, дорогие, только по просьбе, статус виден в панели «Инструменты»); Алексей перебивает тебя реже: быстрый мозг решает, закончил ли он мысль; ты помнишь ход разговора сообщениями и сводку старого; в окне видны расход подписок, память и процессор."),
         Entry(version: "0.1.6", date: "19 ноября 2026",
@@ -31,6 +33,6 @@ public enum VeraChangelog {
     /// The newest entries as a short block for the model's context.
     public static func contextText(limit: Int = 3) -> String {
         let lines = entries.prefix(limit).map { "- \($0.version), \($0.date): \($0.notes)" }
-        return "Что нового у тебя (последние обновления, новые сверху; если Алексей спрашивает, умеешь ли ты что-то новое, ориентируйся на это):\n" + lines.joined(separator: "\n")
+        return "Твой ченджлог (последние обновления с датами, новые сверху). На вопросы про ченджлог, обновления, историю изменений и новые возможности отвечай из этого блока, искать файл не нужно:\n" + lines.joined(separator: "\n")
     }
 }

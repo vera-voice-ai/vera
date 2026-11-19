@@ -261,3 +261,23 @@ private struct Watching: ChatModel {
     #expect(CoreAgent.silenceCommand("выйди из режима тишины") == false)
     #expect(CoreAgent.silenceCommand("режим тишины") == true)
 }
+
+@MainActor @Test func startingInSilentWaitsForHerNameAndTellsTheScene() async {
+    let bus = SignalBus()
+    let stream = await bus.subscribe()
+    let agent = CoreAgent(loop: AgentLoop(model: Watching(seen: Seen()), tools: ToolRegistry([]), systemPrompt: "s"), startMode: .silent)
+    agent.includesSceneContext = false
+    agent.setEnabled(true)
+    let consuming = Task { await agent.consume(bus) }
+    defer { consuming.cancel() }
+    #expect(agent.mode == .silent && agent.modeDeadline == nil)
+    var startup: SignalMessage?
+    for await message in stream where message.type == "core.mode.changed" { startup = message; break }
+    #expect(startup?.payload["mode"] == "silent" && startup?.payload["reason"] == "startup")
+    // A reply without her name is background; with the name it wakes her into Ready.
+    await bus.publish(readyTurn("turn/1", "это нужно два фокуса"))
+    try? await Task.sleep(for: .milliseconds(400))
+    #expect(agent.tasks.isEmpty)
+    await bus.publish(readyTurn("turn/2", "Вера, привет"))
+    #expect(await waitUntil { agent.mode == .ready })
+}
