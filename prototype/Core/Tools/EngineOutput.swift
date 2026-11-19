@@ -30,7 +30,7 @@ enum EngineText {
     static func looksLoggedOut(_ output: String) -> Bool {
         let lower = output.lowercased()
         return ["not logged in", "codex login", "run /login", "please log in", "login required", "authentication_error",
-                "invalid api key", "unauthorized", "не вошёл"].contains { lower.contains($0) }
+                "invalid api key", "unauthorized", "missing bearer", "401", "не вошёл"].contains { lower.contains($0) }
     }
 
     /// One line, without the home folder, paths of users, or anything that looks like a key or token.

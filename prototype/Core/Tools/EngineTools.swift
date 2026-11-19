@@ -124,7 +124,7 @@ struct EngineTool: AgentTool {
             ? "Агент Codex: медленный, дорогой, сильный. Только если Алексей просит глубокий разбор кода или исследование; идёт минуты."
             : "Агент Claude Code: медленный, дорогой, сильный. Только если Алексей просит глубокий разбор кода или исследование; идёт минуты."
         return ToolDefinition(name: kind.binaryName, description: description,
-                              parametersJSON: #"{"type":"object","properties":{"task":{"type":"string","description":"Что сделать, полным предложением"},"mode":{"type":"string","enum":["read","write"],"description":"read: только читать (по умолчанию); write: менять файлы в рабочей папке"}},"required":["task"]}"#)
+                              parametersJSON: #"{"type":"object","properties":{"task":{"type":"string","description":"Что сделать, полным предложением"},"mode":{"type":"string","enum":["read","write"],"description":"read: только читать (по умолчанию); write: менять файлы в рабочей папке, только если Алексей прямо об этом просит"}},"required":["task"]}"#)
     }
 
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "engine tools run asynchronously") }

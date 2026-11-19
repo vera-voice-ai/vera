@@ -303,3 +303,9 @@ private let claudeStreamJSON = """
         #expect(seen.dropFirst().dropLast().allSatisfy { $0.payload["id"] == id && $0.payload["line"] != nil })
     }
 }
+
+@Test func theRealUnauthenticatedMessagesOfBothCLIsAreRecognised() {
+    #expect(EngineText.looksLoggedOut("Not logged in · Please run /login"))
+    #expect(EngineText.looksLoggedOut("ERROR: unexpected status 401 Unauthorized: Missing bearer or basic authentication in header"))
+    #expect(!EngineText.looksLoggedOut("Готово: файл создан"))
+}
