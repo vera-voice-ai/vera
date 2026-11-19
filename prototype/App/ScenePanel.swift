@@ -284,9 +284,6 @@ struct ScenePanel: View {
                     }
                 }
             }
-            Text("в сцене \(Int(SceneTTL().participantPresence / 60)) мин после последней реплики")
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.4))
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }

@@ -14,7 +14,6 @@ struct ResponsePanel: View {
                 Text(!available ? "Озвучка недоступна" : speaker.isMuted ? "Озвучка выключена" : "Озвучка Silero · голос \(speaker.voice)")
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.88))
                 Spacer()
-                Text("предложения по команде output.speech.requested от Core; output.speech.stop обрывает").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             }
             Text(voiceLine).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
             HStack(spacing: 8) {

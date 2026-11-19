@@ -22,10 +22,8 @@ struct CorePanel: View {
             if let reply = inbox.lastReply {
                 HStack(spacing: 6) {
                     Text("СНИМОК СЦЕНЫ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
-                    Text("ревизия \(reply.revision) · \(statusText(reply.status)) · ходов \(reply.turns) · \(reply.participants.isEmpty ? "никого" : reply.participants)")
+                    Text("\(statusText(reply.status)) · ходов \(reply.turns) · \(reply.participants.isEmpty ? "никого" : reply.participants)")
                         .lineLimit(1).truncationMode(.tail)
-                    Spacer()
-                    Text("запрос → ответ \(reply.roundTripMilliseconds) мс")
                 }
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
             }
@@ -105,10 +103,6 @@ struct CorePanel: View {
             Text("ПАМЯТЬ И НАВЫКИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
             Text("фактов: \(counts?.facts ?? 0) · задач в истории: \(counts?.tasks ?? 0) · навыки: \(skills.isEmpty ? "нет" : skills.joined(separator: ", "))")
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
-            Text("команды: «Вера, режим тишины» · «Вера, засыпай» · «стоп» отменяет задачу и речь")
-                .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
-            Text("инструменты: файлы (read_file, list_dir, write_file, append_to_file, replace_in_file, delete_file), память, навыки, интернет (get_weather, web_search, fetch_url), run_command, напоминания · голосом «стоп» отменяет задачу и речь")
-                .font(.system(size: 9)).foregroundStyle(.white.opacity(0.42)).lineLimit(2)
         }
         .padding(.top, 4)
     }

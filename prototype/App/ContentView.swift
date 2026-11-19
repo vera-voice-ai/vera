@@ -103,8 +103,6 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("ВЕРА · КОНТУР СИСТЕМЫ").font(.system(size: 11, weight: .bold, design: .rounded)).tracking(1.5)
                     .foregroundStyle(.white.opacity(0.91))
-                Text("Четыре модуля и Signal Bus · сенсорный прототип подключён")
-                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.42))
             }
             Spacer()
             HStack(spacing: 6) {
@@ -187,8 +185,6 @@ struct ContentView: View {
                 Image(systemName: "ear.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color(hex: 0x38BDF8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Уши").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.88))
-                    Text("поток с микрофона · живой разбор")
-                        .font(.system(size: 9)).foregroundStyle(.white.opacity(0.46))
                 }
                 Spacer(minLength: 0)
             }
@@ -207,10 +203,6 @@ struct ContentView: View {
                 Text("СПЕКТРОГРАММА")
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.58))
-                Spacer()
-                Text("0–8 кГц")
-                    .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.42))
             }
             HStack(spacing: 5) {
                 VStack(alignment: .trailing) {
@@ -230,16 +222,6 @@ struct ContentView: View {
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(.white.opacity(0.06), lineWidth: 1))
                     .accessibilityLabel("Спектрограмма микрофона: частоты от 0 до 8 килогерц за последние пять секунд")
             }
-            HStack {
-                Text("−5 с")
-                Spacer()
-                Text("−2,5 с")
-                Spacer()
-                Text("сейчас")
-            }
-            .font(.system(size: 8, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.42))
-            .padding(.leading, 25)
         }
     }
 
@@ -293,9 +275,6 @@ struct ContentView: View {
                         Text(usageSuffix(model.usageGigaAM))
                             .font(.system(size: 7, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.42))
-                        Text(gigaAMLive ? "ДОСТУПЕН" : "НЕДОСТУПЕН")
-                            .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(gigaAMLive ? .green.opacity(0.9) : .white.opacity(0.38))
                         Circle().fill(gigaAMLive ? .green.opacity(0.8) : .white.opacity(0.2)).frame(width: 6, height: 6)
                     }
                     .padding(.vertical, 2)
@@ -313,9 +292,6 @@ struct ContentView: View {
                         Text(usageSuffix(model.usageCAMPP))
                             .font(.system(size: 7, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.42))
-                        Text(camppAvailable ? "ДОСТУПЕН" : "НЕДОСТУПЕН")
-                            .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(camppAvailable ? .green.opacity(0.9) : .white.opacity(0.38))
                         Circle().fill(camppAvailable ? .green.opacity(0.8) : .white.opacity(0.2)).frame(width: 6, height: 6)
                     }
                     .padding(.vertical, 2)
@@ -351,9 +327,6 @@ struct ContentView: View {
                         Text(usageSuffix(model.usageVoxLock))
                             .font(.system(size: 7, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.42))
-                        Text(voxlockAvailable ? "ДОСТУПЕН" : "НЕДОСТУПЕН")
-                            .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(voxlockAvailable ? .green.opacity(0.9) : .white.opacity(0.38))
                         Circle().fill(voxlockAvailable ? .green.opacity(0.8) : .white.opacity(0.2)).frame(width: 6, height: 6)
                     }
                     .padding(.vertical, 2)
@@ -380,9 +353,6 @@ struct ContentView: View {
                         Text("Nomo-PVAD").font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(nomoAvailable ? .white.opacity(0.86) : .white.opacity(0.36))
                         Spacer(minLength: 0)
-                        Text(nomoAvailable ? "ДОСТУПЕН" : "НЕДОСТУПЕН")
-                            .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(nomoAvailable ? .green.opacity(0.9) : .white.opacity(0.38))
                         Circle().fill(nomoAvailable ? .green.opacity(0.8) : .white.opacity(0.2)).frame(width: 6, height: 6)
                     }
                     .padding(.vertical, 2)
@@ -391,12 +361,6 @@ struct ContentView: View {
                     smartTurnRow
                     separator
                     vadRow
-                    HStack(spacing: 6) {
-                        Image(systemName: "info.circle").foregroundStyle(.cyan.opacity(0.85))
-                        Text("Распознавание и голосовой анализ работают параллельно. Groq/облачная отправка не включены.")
-                            .font(.system(size: 9)).foregroundStyle(.white.opacity(0.5))
-                    }
-                    .padding(.top, 3)
         }
     }
 
@@ -412,9 +376,6 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 Text(model.usageSmartTurn.map { String(format: "CPU %.0f%% · %.1f ГБ", $0.cpuPercent, $0.rssMB / 1024) } ?? "")
                     .font(.system(size: 8, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
-                Text(!available ? "НЕДОСТУПЕН" : running ? "ДОСТУПЕН" : "ЖДЁТ")
-                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(running ? .green.opacity(0.9) : .white.opacity(0.38))
                 Circle().fill(running ? .green.opacity(0.8) : .white.opacity(0.2)).frame(width: 6, height: 6)
             }
             .padding(.vertical, 2)
@@ -467,9 +428,6 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 Text(model.usageVAD.map { String(format: "CPU %.0f%% · %.0f МБ", $0.cpuPercent, $0.rssMB) } ?? "")
                     .font(.system(size: 8, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
-                Text(!available ? "НЕДОСТУПЕН" : running ? "ДОСТУПЕН" : "ЖДЁТ")
-                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(running ? .green.opacity(0.9) : .white.opacity(0.38))
                 Circle().fill(running ? .green.opacity(0.8) : .white.opacity(0.2)).frame(width: 6, height: 6)
             }
             .padding(.vertical, 2)
@@ -653,13 +611,15 @@ struct ContentView: View {
                 .frame(height: 14, alignment: .bottom)
                 .accessibilityLabel("Последние события пакетного анализатора \(name)")
             }
-            HStack(alignment: .top, spacing: 5) {
-                Text("ВХОД").foregroundStyle(.white.opacity(0.35)).frame(width: 33, alignment: .leading)
-                Text(analyzerInputSummary(name, live: live))
-                    .foregroundStyle(.white.opacity(0.52)).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 0)
+            if !live {
+                HStack(alignment: .top, spacing: 5) {
+                    Text("ВХОД").foregroundStyle(.white.opacity(0.35)).frame(width: 33, alignment: .leading)
+                    Text(analyzerInputSummary(name, live: live))
+                        .foregroundStyle(.white.opacity(0.52)).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+                .font(.system(size: 8, design: .monospaced))
             }
-            .font(.system(size: 8, design: .monospaced))
             HStack(alignment: .top, spacing: 5) {
                 Text("ВЫХОД").foregroundStyle(.white.opacity(0.35)).frame(width: 33, alignment: .leading)
                 if live, let message = model.busMonitor.messages.first(where: { $0.source == "Sensors.NomoPVAD" && $0.type == "speaker.target.activity.scored" }) {
@@ -729,8 +689,6 @@ struct ContentView: View {
             Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(accent)
             Text(model.status).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.48)).lineLimit(1)
             Spacer()
-            Text("Вход: микрофон · анализаторы запускаются автоматически на поддерживаемых входах")
-                .font(.system(size: 9)).foregroundStyle(.white.opacity(0.35))
         }
         .padding(.horizontal, 18).padding(.vertical, 9)
         .background(Color.black.opacity(0.12))
