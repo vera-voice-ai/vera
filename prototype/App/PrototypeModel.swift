@@ -51,6 +51,9 @@ final class PrototypeModel {
 
     let bus = SignalBus()
     let busMonitor = BusMonitorModel()
+    /// Telegram as its own sensor (the Sensors panel) and the strong tools' runs (the Инструменты panel).
+    let telegramSensor = TelegramSensorModel()
+    let toolRuns = ToolRunModel()
     let core = CoreInbox()
     /// Core's hands. Works only in a small sandbox folder for now, and only when started with `--agent`.
     let agent: CoreAgent
@@ -140,8 +143,6 @@ final class PrototypeModel {
     var isMicrophoneListening = false
     var microphoneAECActive: Bool?
     var microphoneStatus = "Микрофон выключен"
-    /// Telegram channel: pairing code while unpaired, then "connected". Empty without a token.
-    var telegramStatus = ""
     var microphoneWaveform: [Float] = []
     var microphoneRMS: Float = 0
     var microphonePeak: Float = 0
@@ -247,24 +248,19 @@ final class PrototypeModel {
             scene.judgeName = "Jev-Style-2B v4 · MLX 8 бит"
         }
         Task { await busMonitor.consume(bus) }
+        Task { await telegramSensor.consume(bus) }
+        Task { await toolRuns.consume(bus) }
         Task { await core.consume(bus) }
         Task { await agent.consume(bus) }
         // Telegram: only the instance that runs the agent (`--agent`) polls the bot, and a test copy can opt out with
         // `--no-telegram`, because two pollers of one bot would fight over the updates. The token comes from the Keychain.
         let launchArguments = CommandLine.arguments
-        if launchArguments.contains("--agent"), !launchArguments.contains("--no-telegram"),
-           let token = Secrets.keychainKey(named: "TELEGRAM_BOT_TOKEN") {
+        let telegramPolls = launchArguments.contains("--agent") && !launchArguments.contains("--no-telegram")
+        let telegramToken = telegramPolls ? Secrets.keychainKey(named: "TELEGRAM_BOT_TOKEN") : nil
+        telegramSensor.configure(polls: telegramPolls, hasToken: telegramToken != nil)
+        if let token = telegramToken {
             let telegram = TelegramChannel(token: token, stateURL: runtime.appSupportURL.appending(path: "Telegram/state.json"))
             Task { await telegram.run(bus: bus) }
-            Task { @MainActor [weak self] in
-                guard let bus = self?.bus else { return }
-                for await message in await bus.subscribe() where message.type == "sensors.telegram.status" {
-                    let bot = (message.payload["bot"] ?? "").isEmpty ? "" : "@" + (message.payload["bot"] ?? "")
-                    self?.telegramStatus = message.payload["state"] == "paired"
-                        ? "Telegram \(bot) · подключён"
-                        : "Telegram \(bot) · привязка: отправь боту код \(message.payload["code"] ?? "")"
-                }
-            }
         }
         Task { await speaker.consume(bus) }
         storageUsage.start()
