@@ -18,8 +18,14 @@ guard Secrets.key(named: "OPENCODE_API_KEY") != nil else {
     exit(2)
 }
 
+/// `VERA_REASONING=default` leaves the provider's hidden reasoning on (the app runs with it off); other values are passed as
+/// the reasoning effort. Used to compare accuracy and speed with and without it.
 func makeLoop(_ sandbox: URL) -> AgentLoop {
-    AgentLoop(model: OpenAICompatibleClient(journal: journal), tools: WorkspaceTools(root: sandbox).registry,
+    var configuration = OpenAICompatibleClient.Configuration()
+    if let mode = ProcessInfo.processInfo.environment["VERA_REASONING"] {
+        configuration.reasoningEffort = mode == "default" ? nil : mode
+    }
+    return AgentLoop(model: OpenAICompatibleClient(configuration: configuration, journal: journal), tools: WorkspaceTools(root: sandbox).registry,
               systemPrompt: VeraPrompt.system)
 }
 
