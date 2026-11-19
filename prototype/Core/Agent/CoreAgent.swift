@@ -44,8 +44,7 @@ public final class CoreAgent {
     /// When Ready or Working runs out if the owner says nothing more; nil in Silent and Sleep.
     public private(set) var modeDeadline: Date?
     /// How long Ready and Working last after the owner's last reply (seconds).
-    /// ADR-013 says 60; set to 20 while the modes are being tested by voice.
-    public var readyWindow: TimeInterval = 20
+    public var readyWindow: TimeInterval = 60
     public var workingWindow: TimeInterval = 600
     /// The current time; tests replace it to run the timers without waiting.
     public var clock: () -> Date = { Date() }
@@ -169,7 +168,7 @@ public final class CoreAgent {
                 touch()
                 await bus.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
                                                 type: "output.speech.requested", causationID: message.id.uuidString.lowercased(),
-                                                payload: ["text": Self.listeningPhrase]))
+                                                payload: ["text": Self.isGreeting(text) ? Self.greetingPhrase : Self.listeningPhrase]))
                 continue
             }
             if mode == .silent { await setMode(.ready, bus: bus, reason: "activation", causation: message.id) }
@@ -270,6 +269,14 @@ public final class CoreAgent {
     public static let silencePhrase = "Режим тишины"
     public static let voiceBackPhrase = "Голос включён"
     public static let listeningPhrase = "Слушаю"
+    /// The answer to a greeting alone ("Привет, Вера"): she greets back instead of only saying that she listens.
+    public static let greetingPhrase = "Привет, Алексей"
+
+    /// A greeting among the words of a reply that has nothing else in it (see `isOnlyAddress`).
+    public static func isGreeting(_ text: String) -> Bool {
+        let greetings: Set<String> = ["привет", "здравствуй", "здравствуйте", "добрый", "доброе", "утро", "день", "вечер"]
+        return text.lowercased().split(whereSeparator: { !$0.isLetter }).contains { greetings.contains(String($0)) }
+    }
     public static let sleepPhrase = "Засыпаю"
     public static let wakePhrase = "Просыпаюсь"
     /// What the model answers when a reply is plainly not meant for her: nothing is spoken.

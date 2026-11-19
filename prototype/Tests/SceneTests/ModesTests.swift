@@ -74,7 +74,7 @@ private final class Messages: @unchecked Sendable {
     var now = Date(timeIntervalSince1970: 1_000_000)
     let agent = CoreAgent(loop: AgentLoop(model: ScriptedModel(reply: "ок"), tools: ToolRegistry([]), systemPrompt: "s"))
     agent.clock = { now }
-    agent.readyWindow = 60   // the app uses 20 s while the modes are being tested by voice
+    #expect(agent.readyWindow == 60)
     await agent.setMode(.ready, bus: nil, reason: "test")
     #expect(agent.mode == .ready)
     now = now.addingTimeInterval(59)
@@ -155,9 +155,13 @@ private final class Messages: @unchecked Sendable {
     defer { consuming.cancel() }
     try? await Task.sleep(for: .milliseconds(150))
     await agent.setMode(.silent, bus: bus, reason: "test")
-    await bus.publish(readyTurn("turn/1", "Привет, Вера"))
+    await bus.publish(readyTurn("turn/1", "Вера"))
     #expect(await waitUntil { agent.mode == .ready })
     #expect(await waitUntil { messages.all.contains { $0.payload["text"] == "Слушаю" } })
+    // A greeting is greeted back; the name alone only gets "Слушаю".
+    await agent.setMode(.silent, bus: bus, reason: "test")
+    await bus.publish(readyTurn("turn/2", "Привет, Вера"))
+    #expect(await waitUntil { messages.all.contains { $0.payload["text"] == "Привет, Алексей" } })
     #expect(agent.tasks.isEmpty)
 }
 
