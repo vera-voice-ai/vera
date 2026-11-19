@@ -242,7 +242,7 @@ final class PrototypeModel {
         // `--no-telegram`, because two pollers of one bot would fight over the updates. The token comes from the Keychain.
         let launchArguments = CommandLine.arguments
         if launchArguments.contains("--agent"), !launchArguments.contains("--no-telegram"),
-           let token = Secrets.key(named: "TELEGRAM_BOT_TOKEN") {
+           let token = Secrets.keychainKey(named: "TELEGRAM_BOT_TOKEN") {
             let telegram = TelegramChannel(token: token, stateURL: runtime.appSupportURL.appending(path: "Telegram/state.json"))
             Task { await telegram.run(bus: bus) }
             Task { @MainActor [weak self] in

@@ -10,6 +10,12 @@ public enum Secrets {
         if let value = ProcessInfo.processInfo.environment[name], !value.trimmingCharacters(in: .whitespaces).isEmpty {
             return value.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        return keychainKey(named: name)
+    }
+
+    /// Only Vera 2's own Keychain item, never the environment. For keys whose name other programs also use: a shell that
+    /// exports TELEGRAM_BOT_TOKEN for another bot must not become Vera's bot.
+    public static func keychainKey(named name: String) -> String? {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: keychainService,
                                     kSecAttrAccount as String: name, kSecReturnData as String: true,
                                     kSecMatchLimit as String: kSecMatchLimitOne]
