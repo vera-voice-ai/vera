@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-<header class="topbar"><a class="brand" href="#top"><span class="brand-mark">V</span><span>VERA <small>/ 0.1.3</small></span></a><span class="top-label">ЕДИНАЯ АРХИТЕКТУРНАЯ ДОКУМЕНТАЦИЯ</span><span class="meta">NOV 2026 · DESIGN 0.3</span></header>
+<header class="topbar"><a class="brand" href="#top"><span class="brand-mark">V</span><span>VERA <small>/ 0.1.4</small></span></a><span class="top-label">ЕДИНАЯ АРХИТЕКТУРНАЯ ДОКУМЕНТАЦИЯ</span><span class="meta">NOV 2026 · DESIGN 0.3</span></header>
 <div class="layout" id="top">
   <aside class="sidebar" aria-label="Навигация">
     <div class="side-label">ПРОЕКТ</div><div class="project"><span class="dot"></span> Vera 2 · архитектура</div>
@@ -36,7 +36,7 @@
         </div>
       </details>
       <a href="#adr"><span class="num">03</span> Журнал архитектурных решений</a>
-      <a href="#changelog"><span class="num">04</span> Журнал изменений · 0.1.3</a>
+      <a href="#changelog"><span class="num">04</span> Журнал изменений · 0.1.4</a>
     </nav>
     <div class="side-label nav-section-label">ПРОРАБОТКА</div>
     <nav class="nav" aria-label="Дополнительные материалы">
@@ -409,6 +409,22 @@
 
     <h2 id="changelog">Журнал изменений и версии</h2>
     <p>Версия живёт в одном месте: <code>prototype/SignalBus/VeraRelease.swift</code>. Скрипт <code>bundle.sh</code> проставляет её в Info.plist, а заголовок окна показывает её. Нумерация <code>MAJOR.MINOR.PATCH</code>: до 1.0 новые возможности поднимают MINOR, исправления — PATCH. Каждый релиз — тег <code>vX.Y.Z</code> в ветке и архив <code>prototype/dist/Vera-X.Y.Z.zip</code> из <code>release.sh</code> (он сначала гоняет тесты). Новые записи добавляются сюда сверху, в том же коммите, что и изменение.</p>
+    <h3 id="release-0-1-4">0.1.4 · 19 ноября 2026 · выключатели, заметки, Телеграм через сцену</h3>
+    <ul>
+      <li>Телеграм идёт через Scene: сообщение владельца Scene превращает в реплику с каналом (<code>channel: telegram</code>) и признаком «владелец рядом» (<code>owner_near</code>, его голос слышен в последние минуты); Core принимает только реплики от Scene, без обхода. Контекст для модели говорит, что владелец пишет из Телеграма. В шкале сигналов окна появилась отдельная строка Telegram.</li>
+      <li>Реальные выключатели автоматики (панель Core и голос): тихие часы, таймеры режимов, вариант «[молчу]», окно ответа на вопрос. Команды «выключи тихие часы», «включи окно ответа» и подобные; Вера подтверждает вслух. По умолчанию всё включено. Состояние хранится в настройках приложения.</li>
+      <li>Заметки: архив (<code>Notes/archive/гггг-мм.md</code>, ничего не теряется и не переписывается) и инструмент <code>review_notes</code>: Вера получает новые заметки с прошлого пересмотра и сама решает, какие факты запомнить через <code>remember</code>. Поиск заметок идёт по свежим и архиву.</li>
+      <li>Замер рассуждения модели (TaskBench, 32 задачи): с выключенным скрытым рассуждением 32 из 32, медиана 5,8 с, около 2,8 тыс. токенов ответа; с рассуждением по умолчанию 31 из 32, медиана 8,2 с, около 6,1 тыс. токенов. Точность не выросла, время и токены выросли; решение ADR-009 п. 5 подтверждается данными. Запуск: <code>VERA_REASONING=default swift run TaskBench</code>.</li>
+      <li>В событие <code>scene.turn.ready</code> добавлено <code>scene_latency_ms</code>: сколько Scene держала реплику после конца речи. Цифры накопятся в записях сессий.</li>
+    </ul>
+    <h4>Сравнение распознавания, 19 ноября 2026</h4>
+    <p>80 фрагментов собственной речи владельца (корпус <code>voice-tasks</code>, 5–10 с); эталонной разметки пока нет, поэтому «согласие» с текущим GigaAM v3 (ONNX, CPU) измеряет сходство и скорость, а не точность. Скрипт: <code>prototype/Evaluation/asr_compare.py</code>. Источники кандидатов: <a href="https://github.com/aystream/gigaam-mlx">gigaam-mlx</a>, <a href="https://huggingface.co/mlx-community/whisper-large-v3-turbo">whisper-large-v3-turbo (mlx-community)</a>.</p>
+    <table><tr><th>Система</th><th>Согласие с текущим</th><th>Медиана на фрагмент</th><th>Скорость</th></tr>
+      <tr><td>GigaAM v3 ONNX CPU (текущая)</td><td>эталон сравнения</td><td>197 мс</td><td>37,5× реального времени</td></tr>
+      <tr><td>GigaAM v3 MLX CTC</td><td>98,7 %</td><td>97 мс</td><td>72×</td></tr>
+      <tr><td>GigaAM v3 MLX RNNT</td><td>81,5 %</td><td>171 мс</td><td>42×</td></tr>
+      <tr><td>Whisper large-v3-turbo MLX</td><td>62,4 %</td><td>400 мс</td><td>13×</td></tr></table>
+    <p>Статус: кандидаты, не принято. GigaAM MLX CTC даёт ту же модель и примерно вдвое быстрее, выигрыш около 100 мс на реплику ценой нового окружения. Whisper на этой речи (игровые разговоры, шум) пропускает куски и по сходству заметно хуже. RNNT отличается от CTC в 18 % слов: без разметки нельзя сказать, лучше он или хуже.</p>
     <h3 id="release-0-1-3">0.1.3 · 19 ноября 2026 · песочница, браузер, хранилище, реестр</h3>
     <ul>
       <li>Песочница для команд (ADR-014, решение Алексея «песочница»): команды, которые Вера запускает сама, идут под <code>sandbox-exec</code> (Seatbelt): запись только в рабочую папку и приватную временную, сеть запрещена, чтение секретных мест закрыто (<code>~/.ssh</code>, <code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.hermes</code>, Keychain и папка данных Веры, кроме рабочей). Команды, разрешённые голосом «выполняй», идут без песочницы: слово владельца и есть выход. Без <code>sandbox-exec</code> команда не запускается. Выключатель: <code>VERA_SANDBOX=off</code>. Apple считает <code>sandbox-exec</code> устаревшим, но он работает на macOS 27.</li>

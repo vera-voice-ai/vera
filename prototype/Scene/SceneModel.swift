@@ -119,6 +119,10 @@ public final class SceneModel {
                 payload["loudness_relative"] = turn.loudnessRelative ?? ""
             }
             if let above = turn.aboveFloorDB { payload["loudness_above_floor_db"] = String(format: "%.1f", above) }
+            // How long the scene held the turn after the owner stopped speaking: the scene's own latency, for measuring.
+            if turn.channel == nil, let decided = turn.decidedAt {
+                payload["scene_latency_ms"] = String(max(0, Int(decided.timeIntervalSince(turn.endedAt) * 1000)))
+            }
             if let channel = turn.channel { payload["channel"] = channel; payload["authenticated"] = "true" }
             if let near = turn.ownerNear { payload["owner_near"] = near ? "true" : "false" }
             if let verdict = turn.verdict {

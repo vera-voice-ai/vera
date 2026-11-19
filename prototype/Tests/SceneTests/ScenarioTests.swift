@@ -127,6 +127,8 @@ private final class Tape: @unchecked Sendable {
     await w.advance(120)
     await w.say("А прочитай notes.txt")
     #expect(await w.until { w.agent.modeDeadline == w.now.addingTimeInterval(600) })
+    // The modes do not run out while a task is still running: wait for the second one to finish before the clock jumps.
+    #expect(await w.until { w.agent.tasks.allSatisfy { $0.state == .done } })
     await w.advance(601)
     #expect(w.agent.mode == .silent)
 }
