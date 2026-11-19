@@ -49,6 +49,7 @@ private final class FakeBrowser: BrowserDriving, @unchecked Sendable {
     func click(_ id: Int) async -> BrowserPage { note("click \(id)"); return page }
     func type(_ id: Int, text: String, submit: Bool) async -> BrowserPage { note("type \(id) \(text) \(submit)"); return page }
     func back() async -> BrowserPage { note("back"); return page }
+    func close() async { note("close") }
 }
 
 @Test func theBrowserToolsGiveNumberedElementsAndRefuseWhatIsNotHers() async {
@@ -66,6 +67,11 @@ private final class FakeBrowser: BrowserDriving, @unchecked Sendable {
     #expect(!(await run("browser_type", #"{"id":3,"text":"secret"}"#)).ok)
     #expect(!(await run("browser_click", #"{"id":99}"#)).ok)
     #expect(driver.calls == ["open https://example.com", "click 1"])
+
+    // Closing drops the window and the numbers: an old number is no longer an element.
+    #expect((await run("browser_close", "{}")).ok)
+    #expect(driver.calls.last == "close")
+    #expect(!(await run("browser_click", #"{"id":1}"#)).ok)
 }
 
 @Test func aGoogleRobotCheckIsReportedInsteadOfBeingReadAsResults() async {
@@ -98,4 +104,8 @@ private final class FakeBrowser: BrowserDriving, @unchecked Sendable {
     #expect(clicked.title == "нажато")
     let typed = await engine.type(search?.id ?? 0, text: "привет \"мир\"", submit: false)
     #expect(typed.error == nil)
+    await engine.close()
+    #expect(await engine.read().error != nil)               // nothing is open any more
+    #expect(await engine.loadHTML("<title>Снова</title>").title == "Снова")   // and a fresh window starts on demand
+    await engine.close()
 }

@@ -67,6 +67,15 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
         return await snapshot()
     }
 
+    public func close() async {
+        webView?.navigationDelegate = nil
+        webView?.stopLoading()
+        window?.close()
+        window = nil
+        webView = nil
+        notice = nil
+    }
+
     // MARK: Window and page
 
     private func ensureWindow() -> WKWebView {

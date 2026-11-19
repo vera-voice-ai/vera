@@ -38,6 +38,8 @@ public protocol BrowserDriving: Sendable {
     func click(_ id: Int) async -> BrowserPage
     func type(_ id: Int, text: String, submit: Bool) async -> BrowserPage
     func back() async -> BrowserPage
+    /// Closes the window and drops everything the page held: the next open starts a fresh browser.
+    func close() async
 }
 
 /// What she does not do in a browser on her own, because the owner must: signing in, paying, ordering, sending, deleting,
@@ -90,6 +92,7 @@ public final class BrowserSession: @unchecked Sendable {
 
     public init(driver: any BrowserDriving) { self.driver = driver }
 
+    func forget() { lock.withLock { elements = [:] } }
     func remember(_ page: BrowserPage) { lock.withLock { elements = Dictionary(page.elements.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) } }
     func element(_ id: Int) -> BrowserElement? { lock.withLock { elements[id] } }
 
@@ -199,9 +202,24 @@ struct BrowserBackTool: AgentTool {
     func runAsync(argumentsJSON: String) async -> ToolResult { session.describe(await session.driver.back()) }
 }
 
+struct BrowserCloseTool: AgentTool {
+    let session: BrowserSession
+    var definition: ToolDefinition {
+        ToolDefinition(name: "browser_close", description: "Close the browser window. Everything the pages held is dropped; the next browser_open starts a fresh one. Do it when you are done with the browser or the owner asks.",
+                       parametersJSON: #"{"type":"object","properties":{}}"#)
+    }
+    func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }
+    func runAsync(argumentsJSON: String) async -> ToolResult {
+        await session.driver.close()
+        session.forget()
+        return ToolResult(ok: true, text: "окно браузера закрыто")
+    }
+}
+
 public extension ToolRegistry {
     static func browserTools(_ session: BrowserSession) -> ToolRegistry {
         ToolRegistry([BrowserOpenTool(session: session), BrowserSearchTool(session: session), BrowserReadTool(session: session),
-                      BrowserClickTool(session: session), BrowserTypeTool(session: session), BrowserBackTool(session: session)])
+                      BrowserClickTool(session: session), BrowserTypeTool(session: session), BrowserBackTool(session: session),
+                      BrowserCloseTool(session: session)])
     }
 }
