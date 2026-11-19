@@ -253,3 +253,11 @@ private struct Watching: ChatModel {
     #expect(await waitUntil { agent.tasks.filter { $0.state == .done }.count == 2 })
     #expect(seen.all.contains("[молчу]"))                                 // offered with a reply without her name
 }
+
+@MainActor @Test func dontSpeakTurnsTheVoiceOffAndSpeakTurnsItOn() {
+    #expect(CoreAgent.silenceCommand("не говори") == true)
+    #expect(CoreAgent.silenceCommand("Вера, не говори пока") == true)
+    #expect(CoreAgent.silenceCommand("говори") == false)
+    #expect(CoreAgent.silenceCommand("выйди из режима тишины") == false)
+    #expect(CoreAgent.silenceCommand("режим тишины") == true)
+}

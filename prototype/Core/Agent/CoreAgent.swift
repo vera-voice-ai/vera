@@ -427,6 +427,8 @@ public final class CoreAgent {
         let joined = words.joined(separator: " ")
         let on = ["режим тишины", "тихий режим", "помолчи", "молчи", "не говори", "замолчи на время", "режим молчания"]
         let off = ["выйди из режима тишины", "выключи режим тишины", "режим тишины выключи", "говори", "включи голос", "можешь говорить", "голос включи", "заговори"]
+        // «не говори» contains «говори»: the negation must be read first, or "don't speak" turns the voice on.
+        if joined.contains("не говори") || joined.contains("не разговаривай") { return true }
         if off.contains(where: { joined.contains($0) }) { return false }
         if on.contains(where: { joined.contains($0) }) { return true }
         return nil
