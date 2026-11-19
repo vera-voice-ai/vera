@@ -17,6 +17,14 @@ struct ResponsePanel: View {
                 Text("предложения по команде output.speech.requested от Core; output.speech.stop обрывает").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             }
             Text(voiceLine).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
+            HStack(spacing: 8) {
+                Text("скорость голоса").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
+                Slider(value: Bindable(speaker).speed, in: ResponseSpeaker.speedRange, step: 0.05)
+                    .controlSize(.mini).frame(maxWidth: 160)
+                Text(String(format: "%.2f×", speaker.speed)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.7))
+                Spacer(minLength: 0)
+            }
+            .onChange(of: speaker.speed) { _, value in UserDefaults.standard.set(value, forKey: "VeraVoiceSpeed") }
             Text("СКАЗАНО ВСЛУХ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
             if speaker.utterances.isEmpty {
                 Text("пока ничего не говорила").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))

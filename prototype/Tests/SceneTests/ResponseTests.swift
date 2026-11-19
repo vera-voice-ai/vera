@@ -17,6 +17,24 @@ private struct FakePlayer: AudioPlaying {
     func play(wav: Data) async throws { try await Task.sleep(for: .milliseconds(30)) }
 }
 
+private final class RateRecorder: AudioPlaying, @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen: [Float] = []
+    var rates: [Float] { lock.withLock { seen } }
+    func play(wav: Data) async throws {}
+    func play(wav: Data, rate: Float) async throws { lock.withLock { seen.append(rate) } }
+}
+
+@MainActor @Test func theVoiceIsFivePercentFasterByDefaultAndFollowsTheSlider() async {
+    let recorder = RateRecorder()
+    let speaker = ResponseSpeaker(synthesizer: FakeSynthesizer(), player: recorder)
+    #expect(speaker.speed == 1.05)
+    await speaker.speak("раз", bus: nil)
+    speaker.speed = 1.3
+    await speaker.speak("два", bus: nil)
+    #expect(recorder.rates == [1.05, 1.3])
+}
+
 /// Collects messages from the bus in the background.
 private final class Collector: @unchecked Sendable {
     private let lock = NSLock()

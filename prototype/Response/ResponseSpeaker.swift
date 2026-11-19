@@ -12,11 +12,16 @@ public protocol Synthesizer: Sendable {
 /// Plays WAV audio and returns when it has finished.
 public protocol AudioPlaying: Sendable {
     func play(wav: Data) async throws
+    /// Plays faster or slower; 1.0 is as synthesized. A player without rate control plays at the normal speed.
+    func play(wav: Data, rate: Float) async throws
     /// Cuts the current playback short; `play` then returns.
     func stop() async
 }
 
-public extension AudioPlaying { func stop() async {} }
+public extension AudioPlaying {
+    func stop() async {}
+    func play(wav: Data, rate: Float) async throws { try await play(wav: wav) }
+}
 
 /// The speaking half of Response. Core asks (`output.speech.requested`, a command only Core may send); this
 /// executes and reports what actually happened as events: started, ended or failed. A command is not a result.
@@ -40,6 +45,10 @@ public final class ResponseSpeaker {
     public private(set) var utterances: [Utterance] = []
     public var isMuted = false
     public let voice: String
+    /// Playback speed: 1.0 is as synthesized, 1.05 is 5 % faster. Read for every sentence, so a change is heard at once.
+    public var speed: Double = ResponseSpeaker.defaultSpeed
+    public static let defaultSpeed = 1.05
+    public static let speedRange: ClosedRange<Double> = 0.8...1.5
 
     /// Bumped by a stop command: sentences queued before it are dropped.
     private var generation = 0
@@ -107,7 +116,7 @@ public final class ResponseSpeaker {
         update(id) { $0.state = .speaking; $0.synthesisMilliseconds = synthesisMs }
         await publish("output.speech.started", ["synthesis_ms": "\(synthesisMs)", "chars": "\(text.count)"])
         let playStart = ContinuousClock.now
-        do { try await player.play(wav: wav) } catch {
+        do { try await player.play(wav: wav, rate: Float(speed)) } catch {
             update(id) { $0.state = .failed; $0.error = "\(error)" }
             await publish("output.speech.failed", ["reason": "playback", "error": "\(error)"])
             return
@@ -136,11 +145,15 @@ public final class WavPlayer: NSObject, AudioPlaying, AVAudioPlayerDelegate, @un
 
     public override init() { super.init() }
 
-    public func play(wav: Data) async throws {
+    public func play(wav: Data) async throws { try await play(wav: wav, rate: 1.0) }
+
+    public func play(wav: Data, rate: Float) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             DispatchQueue.main.async {
                 do {
                     let player = try AVAudioPlayer(data: wav)
+                    player.enableRate = true
+                    player.rate = min(2.0, max(0.5, rate))
                     player.delegate = self
                     self.lock.withLock { self.player = player; self.continuation = continuation }
                     if !player.play() { self.finish(throwing: NSError(domain: "VeraResponse", code: 1, userInfo: [NSLocalizedDescriptionKey: "playback did not start"])) }

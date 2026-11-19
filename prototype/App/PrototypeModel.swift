@@ -185,6 +185,9 @@ final class PrototypeModel {
         let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
         self.sileroSpeech = SileroSpeech(runtime: runtime, voice: "baya")
         self.speaker = ResponseSpeaker(synthesizer: SileroSynthesizer(speech: sileroSpeech), player: WavPlayer(), voice: "baya")
+        if let saved = UserDefaults.standard.object(forKey: "VeraVoiceSpeed") as? Double, ResponseSpeaker.speedRange.contains(saved) {
+            self.speaker.speed = saved
+        }
         let repoRoot = URL(fileURLWithPath: ProcessInfo.processInfo.environment["VERA_REPO"] ?? "/Users/alex/Projects/vera-v2")
         let selfModifier = SelfModifier(repo: repoRoot, worktree: runtime.appSupportURL.appending(path: "Self/vera", directoryHint: .isDirectory),
                                         applyScript: repoRoot.appending(path: "prototype/Evaluation/apply-self.sh"))
