@@ -141,7 +141,8 @@ public final class CoreAgent {
                 guard activation || Self.runsAsTask(addressed: message.payload["addressed"] ?? "") else { continue }
             }
             let text = Self.stripAddress(rawText)
-            let note = [Self.loudnessNote(loudness, aboveFloor: aboveFloor),
+            let note = [Self.modeNote(mode, readyWindow: readyWindow, workingWindow: workingWindow),
+                        Self.loudnessNote(loudness, aboveFloor: aboveFloor),
                         activation ? "К тебе обратились по имени: отвечай, молчать нельзя." : nil]
                 .compactMap { $0 }.joined(separator: " ")
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
@@ -493,6 +494,18 @@ public final class CoreAgent {
     /// Loudness is not a condition: the owner's own speech is often quiet, and a hard threshold cut off real requests.
     public static func runsAsTask(addressed: String) -> Bool {
         addressed == "likely" || addressed == "possible"
+    }
+
+    /// What the model is told about the mode she is in, so that she describes herself correctly.
+    public static func modeNote(_ mode: VeraMode, readyWindow: TimeInterval, workingWindow: TimeInterval) -> String? {
+        switch mode {
+        case .ready:
+            return "Режим сейчас «Готовность»: ты отвечаешь без имени; если Алексей молчит \(Int(readyWindow)) с, ты сама уходишь в «Тишину» и говоришь «Режим тишины»."
+        case .working:
+            return "Режим сейчас «В работе»: ты отвечаешь без имени; после \(Int(workingWindow / 60)) мин без его реплик ты сама уходишь в «Тишину»."
+        case .silent, .sleep:
+            return nil
+        }
     }
 
     /// A line for the model about how loud the turn was. Only a quiet turn gets the warning that it may be background.

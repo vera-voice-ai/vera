@@ -34,3 +34,17 @@ import Scene
     #expect(loud?.contains("на 11 дБ выше фона") == true)
     #expect(loud?.contains("фон, а не обращение") == false)
 }
+
+@MainActor @Test func theBackgroundDeltaIsDroppedWhenTheFloorIsDigitalSilence() {
+    #expect(SceneBuilder.aboveFloor(-30, floor: -100) == nil)
+    #expect(SceneBuilder.aboveFloor(-30, floor: nil) == nil)
+    #expect(SceneBuilder.aboveFloor(-30, floor: -50) == 20)
+}
+
+@MainActor @Test func theModelIsToldWhichModeItIsInSoItDoesNotMakeUpItsOwnRules() {
+    let ready = CoreAgent.modeNote(.ready, readyWindow: 20, workingWindow: 600)
+    #expect(ready?.contains("Готовность") == true && ready?.contains("20 с") == true)
+    let working = CoreAgent.modeNote(.working, readyWindow: 20, workingWindow: 600)
+    #expect(working?.contains("10 мин") == true)
+    #expect(CoreAgent.modeNote(.silent, readyWindow: 20, workingWindow: 600) == nil)
+}

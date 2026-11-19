@@ -624,7 +624,7 @@ public struct SceneBuilder: Sendable {
         let quiet = levelHistory.filter { turn.endedAt.timeIntervalSince($0.at) <= 30 }.map(\.rms).sorted()
         let floor = quiet.isEmpty ? nil : Self.decibels(quiet[quiet.count / 5])
         turns[index].loudnessDB = db
-        turns[index].aboveFloorDB = floor.map { db - $0 }
+        turns[index].aboveFloorDB = Self.aboveFloor(db, floor: floor)
         turns[index].loudnessRelative = Self.loudnessLabel(db, baseline: handedLoudness.isEmpty ? nil : Self.median(handedLoudness))
         if case .ready = turns[index].state, turn.speakerLabel != nil {
             handedLoudness.append(db)
@@ -633,6 +633,13 @@ public struct SceneBuilder: Sendable {
     }
 
     static func decibels(_ rms: Double) -> Double { 20 * log10(max(rms, 1e-5)) }
+
+    /// How far a turn is above the background. Nil when the floor is digital silence (the microphone's voice processing
+    /// gates quiet rooms to nothing): a delta against it is meaningless, as "+76 dB" on a quiet phrase showed.
+    public static func aboveFloor(_ db: Double, floor: Double?) -> Double? {
+        guard let floor, floor > -85 else { return nil }
+        return db - floor
+    }
 
     static func median(_ values: [Double]) -> Double {
         let sorted = values.sorted()
