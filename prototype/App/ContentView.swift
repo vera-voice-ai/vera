@@ -3,6 +3,7 @@ import Scene
 import Sensors
 import SignalBus
 import SceneAnalyzers
+import Core
 
 /// ScrollView, or its plain content: ImageRenderer cannot draw a ScrollView, and the off-screen snapshot needs the content.
 private struct MaybeScroll<Content: View>: View {
@@ -94,6 +95,21 @@ struct ContentView: View {
         .onAppear { model.runAutomationIfRequested() }
     }
 
+    private var deepSeekText: (text: String, help: String) {
+        switch model.deepSeekState {
+        case .unknown: return ("DeepSeek —", "баланс ещё не запрошен")
+        case .balance(let balance): return ("DeepSeek \(balance.display)", "баланс по данным DeepSeek API")
+        case .failed(let reason): return ("DeepSeek —", reason)
+        }
+    }
+
+    private func usageLabel(_ text: String, help: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(0.8)
+            .foregroundStyle(.white.opacity(0.6))
+            .help(help)
+    }
+
     private var header: some View {
         HStack(spacing: 11) {
             ZStack {
@@ -105,6 +121,10 @@ struct ContentView: View {
                     .foregroundStyle(.white.opacity(0.91))
             }
             Spacer()
+            HStack(spacing: 16) {
+                usageLabel(deepSeekText.text, help: deepSeekText.help)
+                usageLabel("OpenCode Go: нет данных", help: "публичного способа узнать расход пока нет")
+            }
             HStack(spacing: 6) {
                 Circle().fill(model.isAnalyzing ? .orange : .green).frame(width: 7, height: 7)
                 Text(model.isAnalyzing ? "PROCESSING" : "READY")
@@ -483,9 +503,10 @@ struct ContentView: View {
                 Text("ЧТО СОХРАНЯЕТСЯ · ГДЕ")
                     .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.white.opacity(0.42))
             }
+            freeSpaceLine
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    storageItem("Образцы голосов", "Копируются в ~/Library/Application Support/VeraSensorPrototype/Users/voice-samples/")
+                    storageItem("Образцы голосов", "Копируются в ~/Library/Application Support/VeraSensorPrototype/Users/voice-samples/", area: .users)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Люди и векторы").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.82))
                         HStack(spacing: 6) {
@@ -497,13 +518,13 @@ struct ContentView: View {
                             .font(.system(size: 9, design: .monospaced)).foregroundStyle(.green.opacity(0.75))
                             .lineLimit(2).textSelection(.enabled)
                     }
-                    storageItem("Логи моделей", "~/Library/Application Support/VeraSensorPrototype/Logs/")
-                    storageItem("Лента звука", "Всё, что слышит микрофон: WAV 16 кГц mono, по файлу на час, бессрочно (~115 МБ/ч) · ~/Library/Application Support/VeraSensorPrototype/Tape/<день>/<час>.wav")
-                    storageItem("Память Core", "Факты и история задач, JSONL (бессрочно, до 20 МБ на файл) · ~/Library/Application Support/VeraSensorPrototype/Memory/")
-                    storageItem("Навыки", "Markdown-файлы с описанием в шапке; Core видит список и подгружает текст по read_skill · ~/Library/Application Support/VeraSensorPrototype/Skills/")
-                    storageItem("Журнал модели", "Каждый запрос и ответ модели, без заголовков авторизации · ~/Library/Application Support/VeraSensorPrototype/Journal/")
-                    storageItem("Рабочая папка агента", "Единственное место, где Core читает и пишет файлы · ~/Library/Application Support/VeraSensorPrototype/Workspace/")
-                    storageItem("Запись шины", "Сообщения Sensors, один JSONL на сессию микрофона · ~/Library/Application Support/VeraSensorPrototype/Recordings/")
+                    storageItem("Логи моделей", "~/Library/Application Support/VeraSensorPrototype/Logs/", area: .logs)
+                    storageItem("Лента звука", "Всё, что слышит микрофон: WAV 16 кГц mono, по файлу на час, бессрочно (~115 МБ/ч) · ~/Library/Application Support/VeraSensorPrototype/Tape/<день>/<час>.wav", area: .tape)
+                    storageItem("Память Core", "Факты и история задач, JSONL (бессрочно, до 20 МБ на файл) · ~/Library/Application Support/VeraSensorPrototype/Memory/", area: .memory)
+                    storageItem("Навыки", "Markdown-файлы с описанием в шапке; Core видит список и подгружает текст по read_skill · ~/Library/Application Support/VeraSensorPrototype/Skills/", area: .skills)
+                    storageItem("Журнал модели", "Каждый запрос и ответ модели, без заголовков авторизации · ~/Library/Application Support/VeraSensorPrototype/Journal/", area: .journal)
+                    storageItem("Рабочая папка агента", "Единственное место, где Core читает и пишет файлы · ~/Library/Application Support/VeraSensorPrototype/Workspace/", area: .workspace)
+                    storageItem("Запись шины", "Сообщения Sensors, один JSONL на сессию микрофона · ~/Library/Application Support/VeraSensorPrototype/Recordings/", area: .recordings)
                     storageItem("Ревизии сцены", "Только в памяти процесса; сохраняются лишь как сообщения scene в шине, которые не пишутся.", color: .orange)
                 }
                 .padding(.trailing, 4)
@@ -515,9 +536,31 @@ struct ContentView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.green.opacity(0.45), style: StrokeStyle(lineWidth: 1.1, dash: [6, 4])))
     }
 
-    private func storageItem(_ title: String, _ location: String, color: Color = .green) -> some View {
+    /// Free and total space of the volume, amber under 20 GB free and red under 5 GB.
+    private var freeSpaceLine: some View {
+        let snapshot = model.storageUsage.snapshot
+        let text: String
+        let color: Color
+        if let free = snapshot?.freeBytes {
+            let total = snapshot?.totalBytes.map(StorageUsageModel.bytesText) ?? "—"
+            text = "Свободно на диске: \(StorageUsageModel.bytesText(free)) из \(total)"
+            color = free < 5_000_000_000 ? .red : free < 20_000_000_000 ? .orange : .green.opacity(0.85)
+        } else {
+            text = "Свободно на диске: —"
+            color = .white.opacity(0.5)
+        }
+        return Text(text).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(color)
+            .padding(.bottom, 2)
+    }
+
+    private func storageItem(_ title: String, _ location: String, color: Color = .green, area: StorageUsage.Area? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.82))
+            HStack(spacing: 6) {
+                Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.82))
+                if let area, let size = model.storageUsage.sizeText(area) {
+                    Text(size).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.55))
+                }
+            }
             Text(location).font(.system(size: 9, design: .monospaced)).foregroundStyle(color.opacity(0.75))
                 .lineLimit(2).textSelection(.enabled)
         }

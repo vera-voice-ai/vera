@@ -61,6 +61,11 @@ final class PrototypeModel {
     let workspaceURL: URL
     private let recorder = BusRecorder()
     private let tape: AudioTape
+    /// Storage panel sizes, scanned off the main thread every minute.
+    let storageUsage: StorageUsageModel
+    /// DeepSeek balance for the header; the key comes from the Keychain only.
+    let deepSeek = DeepSeekBalance()
+    var deepSeekState: DeepSeekBalance.State = .unknown
     private var lastTapePosition: AudioTape.Position?
     var recordingFileName: String?
     var recordedMessageCount = 0
@@ -215,6 +220,7 @@ final class PrototypeModel {
         self.agent.reminders = reminders
         self.agent.restartHandler = { NSApplication.shared.terminate(nil) }
         self.tape = AudioTape(directory: runtime.appSupportURL.appending(path: "Tape", directoryHint: .isDirectory))
+        self.storageUsage = StorageUsageModel(root: runtime.appSupportURL)
         let gigaAMAnalyzer = GigaAMAnalyzer(runtime: runtime)
         let camPlusAnalyzer = SpeakerEmbeddingAnalyzer(runtime: runtime)
         self.gigaAMAnalyzer = gigaAMAnalyzer
@@ -256,6 +262,12 @@ final class PrototypeModel {
             }
         }
         Task { await speaker.consume(bus) }
+        storageUsage.start()
+        let balance = deepSeek
+        Task { @MainActor [weak self] in
+            for await state in balance.updates { self?.deepSeekState = state }
+        }
+        Task { await balance.start() }
         // Core asks Sensors to stop the microphone when she goes to sleep; switching it on again wakes her.
         Task { @MainActor [weak self] in
             guard let bus = self?.bus else { return }
