@@ -33,7 +33,7 @@ private func session() -> URLSession {
         let usage = OpenCodeUsage(session: session(), keyProvider: { "test-key" })
         let state = await usage.refresh()
         guard case let .usage(value) = state else { Issue.record("expected usage, got \(state)"); return }
-        #expect(value.display == "5ч 23% · нед 8% · мес 3%")
+        #expect(value.display == "23%/8%/3%")
         #expect(UsageStub.lastAuthorization == "Bearer test-key")
         #expect(UsageStub.lastURL == OpenCodeUsage.endpoint)
     }

@@ -68,6 +68,11 @@ final class PrototypeModel {
     var deepSeekState: DeepSeekBalance.State = .unknown
     let openCodeUsage = OpenCodeUsage()
     var openCodeState: OpenCodeUsage.State = .unknown
+    /// Codex subscription limits for the header; read through the local CLI, no key.
+    let codexUsage = CodexUsage()
+    var codexState: CodexUsage.State = .unknown
+    /// Vera's total memory and CPU (this process and its children) for the header.
+    let resources = ResourceMonitor()
     private var lastTapePosition: AudioTape.Position?
     var recordingFileName: String?
     var recordedMessageCount = 0
@@ -278,6 +283,12 @@ final class PrototypeModel {
             for await state in openCode.updates { self?.openCodeState = state }
         }
         Task { await openCode.start() }
+        let codex = codexUsage
+        Task { @MainActor [weak self] in
+            for await state in codex.updates { self?.codexState = state }
+        }
+        Task { await codex.start() }
+        resources.start()
         // Core asks Sensors to stop the microphone when she goes to sleep; switching it on again wakes her.
         Task { @MainActor [weak self] in
             guard let bus = self?.bus else { return }
