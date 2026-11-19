@@ -223,3 +223,33 @@ private struct StubbornModel: ChatModel {
     #expect(agent.tasks.first?.answer == "Всё хорошо, спасибо.")
     #expect(await waitUntil { messages.all.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Всё хорошо, спасибо." } })
 }
+
+/// Remembers every system message it was shown.
+private final class Seen: @unchecked Sendable {
+    private let lock = NSLock(); private var items: [String] = []
+    var all: String { lock.withLock { items.joined(separator: "\n") } }
+    func add(_ messages: [ChatMessage]) { lock.withLock { items += messages.filter { $0.role == .system }.compactMap(\.content) } }
+}
+private struct Watching: ChatModel {
+    let seen: Seen
+    func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+        seen.add(messages); var turn = ChatTurn(); turn.text = "Ответ."; onText("Ответ."); return turn
+    }
+}
+
+@MainActor @Test func theOptionToStayQuietIsOfferedOnlyWithARepliedWithoutHerName() async {
+    let seen = Seen(); let bus = SignalBus()
+    let agent = CoreAgent(loop: AgentLoop(model: Watching(seen: seen), tools: ToolRegistry([]), systemPrompt: VeraPrompt.system))
+    agent.includesSceneContext = false
+    agent.setEnabled(true)
+    let consuming = Task { await agent.consume(bus) }
+    defer { consuming.cancel() }
+    try? await Task.sleep(for: .milliseconds(150))
+    #expect(!VeraPrompt.system.contains("[молчу]"))                       // never in the general prompt
+    await bus.publish(readyTurn("turn/1", "Вера, удали всё"))
+    #expect(await waitUntil { agent.tasks.first?.state == .done })
+    #expect(!seen.all.contains("[молчу]"))                                // not for a request that names her
+    await bus.publish(readyTurn("turn/2", "а удали всё"))
+    #expect(await waitUntil { agent.tasks.filter { $0.state == .done }.count == 2 })
+    #expect(seen.all.contains("[молчу]"))                                 // offered with a reply without her name
+}

@@ -170,7 +170,7 @@ public final class CoreAgent {
             let text = Self.stripAddress(rawText)
             let note = [Self.modeNote(mode, readyWindow: readyWindow, workingWindow: workingWindow),
                         Self.loudnessNote(loudness, aboveFloor: aboveFloor),
-                        activation ? "К тебе обратились по имени: отвечай, молчать нельзя." : nil]
+                        activation ? "К тебе обратились по имени: отвечай, молчать нельзя." : Self.silenceOption]
                 .compactMap { $0 }.joined(separator: " ")
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
             if Self.isStopCommand(text) {
@@ -362,6 +362,9 @@ public final class CoreAgent {
     public static let wakePhrase = "Просыпаюсь"
     /// What the model answers when a reply is plainly not meant for her: nothing is spoken.
     public static let silenceMarker = "[молчу]"
+    /// Offered only with a reply that came without her name: the model may stay silent when it is plainly not for her.
+    /// It is not in the general prompt, so a request that reaches her by name or by a benchmark can never be answered with it.
+    static let silenceOption = "Это реплика без обращения по имени. Приветствия, вопросы и просьбы считай обращением к тебе и отвечай. Ответь ровно «[молчу]» и больше ничего, только если реплика бесспорно не тебе: пересказ видео или чужой разговор, обрывок фразы, звонок по телефону, слова себе под нос. Малейшее сомнение — отвечай как обычно."
     static let wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
 
     /// The activation phrase: her name among the first three or the last three words of a reply, however long it is.
