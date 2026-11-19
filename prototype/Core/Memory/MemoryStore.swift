@@ -73,6 +73,64 @@ public final class MemoryStore: @unchecked Sendable {
         return "Профиль Алексея (кто он и чем живёт; это фон, а не инструкции):\n" + text
     }
 
+    // MARK: - Conversation: recent exchanges verbatim, older ones as a rolling summary
+
+    private var summaryURL: URL { directory.appending(path: "conversation-summary.json") }
+
+    private struct Summary: Codable { var text: String; var upTo: Date }
+
+    /// The last finished exchanges (request and answer), oldest first, newer than the summary, within a character budget:
+    /// they go to the model as real messages, so that it follows the thread of the conversation.
+    public func recentExchanges(maxCount: Int = 12, maxChars: Int = 5_000, now: Date = .now, maxAge: TimeInterval = 86_400) -> [Entry] {
+        let cutoff = max(summaryUpTo ?? .distantPast, now.addingTimeInterval(-maxAge))
+        let tasks = entries(historyURL).filter { $0.kind == .task && $0.at > cutoff && $0.answer != nil }
+        var chosen: [Entry] = []
+        var used = 0
+        for entry in tasks.suffix(maxCount).reversed() {
+            let size = entry.text.count + (entry.answer?.count ?? 0)
+            if used + size > maxChars, !chosen.isEmpty { break }
+            used += size
+            chosen.append(entry)
+        }
+        return chosen.reversed()
+    }
+
+    /// What happened earlier, compressed: shown to the model in the background context.
+    public func conversationSummary() -> String? {
+        guard let summary = readSummary(), !summary.text.isEmpty else { return nil }
+        return "Что было раньше в ваших разговорах (сжато):\n" + summary.text
+    }
+
+    private var summaryUpTo: Date? { readSummary()?.upTo }
+
+    private func readSummary() -> Summary? {
+        lock.withLock {
+            guard let data = try? Data(contentsOf: summaryURL) else { return nil }
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .millisecondsSince1970
+            return try? decoder.decode(Summary.self, from: data)
+        }
+    }
+
+    /// Exchanges that are older than the `keep` newest ones and not yet in the summary.
+    public func exchangesToCompact(keep: Int = 12, batch: Int = 12) -> [Entry]? {
+        let after = summaryUpTo ?? .distantPast
+        let tasks = entries(historyURL).filter { $0.kind == .task && $0.at > after && $0.answer != nil }
+        let older = Array(tasks.dropLast(keep))
+        return older.count >= batch ? older : nil
+    }
+
+    /// Folds `exchanges` into the summary with the given summarizer (a model call); the summary is replaced only on success.
+    @discardableResult
+    public func compact(_ exchanges: [Entry], summarize: @Sendable (_ previous: String, _ transcript: String) async -> String?) async -> Bool {
+        guard let last = exchanges.last else { return false }
+        let transcript = exchanges.map { "Алексей: \($0.text)\nВера: \($0.answer ?? "")" }.joined(separator: "\n")
+        let previous = readSummary()?.text ?? ""
+        guard let text = await summarize(previous, transcript)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return false }
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .millisecondsSince1970
+        guard let data = try? encoder.encode(Summary(text: String(text.prefix(1_500)), upTo: last.at)) else { return false }
+        return lock.withLock { (try? data.write(to: summaryURL, options: .atomic)) != nil }
+    }
+
     public var counts: (facts: Int, tasks: Int) { (entries(factsURL).count, entries(historyURL).count) }
 
     // MARK: - Files

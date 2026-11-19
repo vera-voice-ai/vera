@@ -563,7 +563,9 @@ public final class CoreAgent {
         if includesChangelog { context = [context, VeraChangelog.contextText()].compactMap { $0 }.joined(separator: "\n") }
         if let profile = memory?.profileText() { context = [context, profile].compactMap { $0 }.joined(separator: "\n") }
         if let facts = memory?.factsText() { context = [context, facts].compactMap { $0 }.joined(separator: "\n") }
-        if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
+        // With a memory the recent exchanges go to the model as real messages (below); without one the in-memory list is the fallback.
+        if memory == nil, let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
+        if let summary = memory?.conversationSummary() { context = [context, summary].compactMap { $0 }.joined(separator: "\n") }
         if let note { context = [context, note].compactMap { $0 }.joined(separator: "\n") }
         // The answer is spoken sentence by sentence as it is written, one command per sentence, in order.
         let chunker = Locked(SpeechChunker())
@@ -611,13 +613,17 @@ public final class CoreAgent {
                 }
             }
         }
-        var result = await Self.$currentTaskID.withValue(id) { await loop.run(request: request, context: context, onEvent: onEvent) }
+        // The thread of the conversation: the last exchanges as user/assistant messages, oldest first.
+        let history: [ChatMessage] = (memory?.recentExchanges() ?? []).flatMap { entry in
+            [ChatMessage(role: .user, content: entry.text), ChatMessage(role: .assistant, content: entry.answer)]
+        }
+        var result = await Self.$currentTaskID.withValue(id) { await loop.run(request: request, history: history, context: context, onEvent: onEvent) }
         // Called by her name she must answer: "[молчу]" is only for replies that are plainly not hers.
         if mustAnswer, result.succeeded, Self.isSilenceMarker(result.answer) {
             chunker.withLock { $0 = SpeechChunker() }   // the marker of the first try must not leak into her spoken answer
             result = await Self.$currentTaskID.withValue(id) {
                 await loop.run(request: request + "\n(Тебя назвали по имени: ответь по существу, ответ «[молчу]» здесь недопустим.)",
-                               context: context, onEvent: onEvent)
+                               history: history, context: context, onEvent: onEvent)
             }
         }
         update(id) {
@@ -650,7 +656,10 @@ public final class CoreAgent {
         // The window restarts after a finished task only when it was a real piece of work (named, or it used a tool): an
         // answer to a stray remark must not keep her listening, or she answers the whole conversation around her.
         if mode == .ready || mode == .working, mustAnswer || !result.toolCalls.isEmpty { touch() }
-        if result.succeeded, !stayedSilent { memory?.recordTask(request: request, answer: result.answer) }
+        if result.succeeded, !stayedSilent {
+            memory?.recordTask(request: request, answer: result.answer)
+            compactConversationInBackground()
+        }
         if result.succeeded, !stayedSilent {
             // What the stream did not already cover: a tail without a full stop, or the whole answer when nothing streamed.
             if streams, let tail = chunker.withLock({ $0.flush() }) { sink.yield(tail) }
@@ -659,6 +668,24 @@ public final class CoreAgent {
         sink.finish()
         await speaker.value
         return result
+    }
+
+    private var compacting = false
+
+    /// Older exchanges are folded into the rolling summary by the model itself, in the background, when enough pile up.
+    private func compactConversationInBackground() {
+        guard let memory, let loop, !compacting, let old = memory.exchangesToCompact() else { return }
+        compacting = true
+        Swift.Task { @MainActor in
+            await memory.compact(old) { previous, transcript in
+                let prompt = "Сожми разговор Алексея с Верой в короткую сводку для самой Веры, не больше 900 символов: о чём говорили, что решили, что она обещала или не смогла, что Алексей любит и не любит, имена и числа. Только сводка, без вступления."
+                let body = (previous.isEmpty ? "" : "Прежняя сводка:\n\(previous)\n\n") + "Новые реплики:\n\(transcript)"
+                let messages = [ChatMessage(role: .system, content: prompt), ChatMessage(role: .user, content: body)]
+                guard let turn = try? await loop.model.respond(messages: messages, tools: [], onText: { _ in }) else { return nil }
+                return turn.text
+            }
+            self.compacting = false
+        }
     }
 
     static func taskID(turnID: String?) -> String {

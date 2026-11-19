@@ -160,7 +160,7 @@ public final class SceneModel {
             case let .heard(reason): return reason == "not_addressed"
             case .awaiting: return false
             }
-        }.suffix(6)
+        }.suffix(8)
         if !turns.isEmpty {
             lines.append("Последние реплики (старые сверху):")
             for turn in turns {
@@ -171,7 +171,7 @@ public final class SceneModel {
                 if turn.speakerID == "unknown" {
                     who = "неопознанный голос" + (turn.ownerProbability.map { ", возможно владелец: \(Int(($0 * 100).rounded()))%" } ?? "")
                 }
-                lines.append("- \(who), \(kind), \(age(turn.endedAt)): \(String(turn.text.prefix(400)))")
+                lines.append("- \(who), \(kind), \(age(turn.endedAt)): \(String(turn.text.prefix(300)))")
             }
         }
         return lines.joined(separator: "\n")

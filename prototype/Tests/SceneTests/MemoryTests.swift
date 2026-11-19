@@ -117,3 +117,77 @@ private func fakeModifier(testOutput: String, testCode: Int32 = 0) throws -> (Se
     let text = try #require(memory.profileText())
     #expect(text.hasPrefix("Профиль Алексея") && text.count < MemoryStore.profileLimit + 120)
 }
+
+private func tempMemory() -> (MemoryStore, URL) {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "vera-conv-\(UUID().uuidString)")
+    return (MemoryStore(directory: directory), directory)
+}
+
+@Test func recentExchangesComeOldestFirstWithinTheBudgetAndTheAge() {
+    let (memory, directory) = tempMemory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let now = Date()
+    memory.recordTask(request: "очень старое", answer: "давно", at: now.addingTimeInterval(-3 * 86_400))
+    for i in 1...6 { memory.recordTask(request: "вопрос \(i)", answer: "ответ \(i)", at: now.addingTimeInterval(Double(i - 10) * 60)) }
+    let all = memory.recentExchanges(now: now)
+    #expect(all.map(\.text) == (1...6).map { "вопрос \($0)" })              // the old one is out; the rest in time order
+    #expect(memory.recentExchanges(maxCount: 2, now: now).map(\.text) == ["вопрос 5", "вопрос 6"])
+    #expect(memory.recentExchanges(maxChars: 30, now: now).count < 6)       // the character budget cuts from the old end
+}
+
+@Test func olderExchangesAreFoldedIntoTheSummaryAndLeaveTheRecentOnes() async {
+    let (memory, directory) = tempMemory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let now = Date()
+    for i in 1...30 { memory.recordTask(request: "вопрос \(i)", answer: "ответ \(i)", at: now.addingTimeInterval(Double(i - 40) * 60)) }
+    let old = try! #require(memory.exchangesToCompact(keep: 12, batch: 12))
+    #expect(old.count == 18 && old.first?.text == "вопрос 1" && old.last?.text == "вопрос 18")
+    let done = await memory.compact(old) { previous, transcript in
+        #expect(previous.isEmpty && transcript.contains("Алексей: вопрос 1") && transcript.contains("Вера: ответ 18"))
+        return "Говорили про вопросы 1–18."
+    }
+    #expect(done)
+    #expect(memory.conversationSummary()?.contains("Говорили про вопросы 1–18.") == true)
+    // The summary replaces the old exchanges in the thread, and nothing more needs compacting until more pile up.
+    #expect(memory.recentExchanges(now: now).first?.text == "вопрос 19")
+    #expect(memory.exchangesToCompact(keep: 12, batch: 12) == nil)
+}
+
+@Test func aFailedSummarizerLeavesEverythingAsItWas() async {
+    let (memory, directory) = tempMemory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    for i in 1...20 { memory.recordTask(request: "q\(i)", answer: "a\(i)", at: Date().addingTimeInterval(Double(i - 30) * 60)) }
+    let old = memory.exchangesToCompact(keep: 5, batch: 5)!
+    #expect(await memory.compact(old) { _, _ in nil } == false)
+    #expect(memory.conversationSummary() == nil)
+    #expect(memory.exchangesToCompact(keep: 5, batch: 5)?.count == old.count)
+}
+
+private actor ThreadSeen {
+    private(set) var runs: [[ChatMessage]] = []
+    func add(_ messages: [ChatMessage]) { runs.append(messages) }
+}
+
+@MainActor @Test func theThreadOfTheConversationReachesTheModelAsMessages() async {
+    struct Spy: ChatModel {
+        let seen: ThreadSeen
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            await seen.add(messages)
+            var turn = ChatTurn(); turn.text = "ок"; onText("ок"); return turn
+        }
+    }
+    let (memory, directory) = tempMemory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let seen = ThreadSeen()
+    let agent = CoreAgent(loop: AgentLoop(model: Spy(seen: seen), tools: ToolRegistry([]), systemPrompt: "s"), memory: memory)
+    agent.includesSceneContext = false
+    agent.includesChangelog = false
+    agent.setEnabled(true)
+    _ = await agent.run(request: "поменяй draft на final")
+    _ = await agent.run(request: "а теперь верни обратно")
+    let second = await seen.runs.last ?? []
+    let roles = second.map { $0.role }
+    #expect(roles.suffix(3) == [ChatMessage.Role.user, .assistant, .user])                       // earlier request, her answer, the new request
+    #expect(second.suffix(3).first?.content == "поменяй draft на final")
+    #expect(second.last?.content == "а теперь верни обратно")
+}
