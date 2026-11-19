@@ -190,3 +190,30 @@ private final class Messages: @unchecked Sendable {
     #expect(agent.mode == .silent)
     #expect(await waitUntil { messages.all.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Режим тишины" } })
 }
+
+/// Says "[молчу]" to everything until it is told that silence is not allowed.
+private struct StubbornModel: ChatModel {
+    func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+        var turn = ChatTurn()
+        let forbidden = messages.last?.content?.contains("недопустим") == true
+        turn.text = forbidden ? "Всё хорошо, спасибо." : "[молчу]"
+        onText(turn.text)
+        return turn
+    }
+}
+
+@MainActor @Test func calledByNameSheAnswersEvenIfTheModelWantsToStaySilent() async {
+    let bus = SignalBus(); let messages = Messages()
+    let capture = await messages.start(bus)
+    defer { capture.cancel() }
+    let agent = CoreAgent(loop: AgentLoop(model: StubbornModel(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.includesSceneContext = false
+    agent.setEnabled(true)
+    let consuming = Task { await agent.consume(bus) }
+    defer { consuming.cancel() }
+    try? await Task.sleep(for: .milliseconds(150))
+    await bus.publish(readyTurn("turn/1", "Какая сейчас погода, Вера?"))
+    #expect(await waitUntil { agent.tasks.first?.state == .done })
+    #expect(agent.tasks.first?.answer == "Всё хорошо, спасибо.")
+    #expect(await waitUntil { messages.all.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Всё хорошо, спасибо." } })
+}

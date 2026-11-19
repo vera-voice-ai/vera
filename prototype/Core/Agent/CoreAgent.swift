@@ -141,7 +141,9 @@ public final class CoreAgent {
                 guard activation || Self.runsAsTask(addressed: message.payload["addressed"] ?? "") else { continue }
             }
             let text = Self.stripAddress(rawText)
-            let note = Self.loudnessNote(loudness, aboveFloor: aboveFloor)
+            let note = [Self.loudnessNote(loudness, aboveFloor: aboveFloor),
+                        activation ? "К тебе обратились по имени: отвечай, молчать нельзя." : nil]
+                .compactMap { $0 }.joined(separator: " ")
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
             if Self.isStopCommand(text) {
                 await cancelAll(bus: bus, reason: "voice")
@@ -179,7 +181,8 @@ public final class CoreAgent {
             let key = UUID()
             live[key] = Swift.Task { @MainActor in
                 if await self.runGate.acquire() {
-                    _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp, note: note)
+                    _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp,
+                                       note: note.isEmpty ? nil : note, mustAnswer: activation)
                     await self.runGate.release()
                 } else {
                     self.update(id) { $0.state = .cancelled }
@@ -363,7 +366,7 @@ public final class CoreAgent {
     /// Runs one task. Also the entry point for benchmarks.
     @discardableResult
     public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil, readyAt: Date? = nil,
-                    note: String? = nil) async -> AgentResult {
+                    note: String? = nil, mustAnswer: Bool = false) async -> AgentResult {
         guard let loop else {
             var result = AgentResult(); result.error = unavailableReason
             return result
@@ -415,7 +418,7 @@ public final class CoreAgent {
             }
         }
         let streams = streamsSpeech && bus != nil
-        let result = await loop.run(request: request, context: context) { [weak self] event in
+        let onEvent: @Sendable (AgentEvent) -> Void = { [weak self] event in
             guard let self else { return }
             if streams, case let .text(delta) = event { for sentence in chunker.withLock({ $0.feed(delta) }) { sink.yield(sentence) } }
             Swift.Task { @MainActor in
@@ -428,6 +431,13 @@ public final class CoreAgent {
                                                                               "ms": "\(record.milliseconds)"]))
                 }
             }
+        }
+        var result = await loop.run(request: request, context: context, onEvent: onEvent)
+        // Called by her name she must answer: "[молчу]" is only for replies that are plainly not hers.
+        if mustAnswer, result.succeeded, Self.isSilenceMarker(result.answer) {
+            chunker.withLock { $0 = SpeechChunker() }   // the marker of the first try must not leak into her spoken answer
+            result = await loop.run(request: request + "\n(Тебя назвали по имени: ответь по существу, ответ «[молчу]» здесь недопустим.)",
+                                    context: context, onEvent: onEvent)
         }
         update(id) {
             $0.state = result.succeeded ? .done : (result.error == "cancelled" ? .cancelled : .failed)
