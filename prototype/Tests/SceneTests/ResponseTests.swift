@@ -31,6 +31,7 @@ private final class RateRecorder: AudioPlaying, @unchecked Sendable {
 @MainActor @Test func theVoiceIsFivePercentFasterByDefaultAndFollowsTheSlider() async {
     let recorder = RateRecorder()
     let speaker = ResponseSpeaker(synthesizer: FakeSynthesizer(), player: recorder)
+    speaker.quietHours.enabled = false   // these tests are about speed and requested volume, not the hour of the day
     #expect(speaker.speed == 1.05)
     await speaker.speak("раз", bus: nil)
     speaker.speed = 1.3
@@ -42,6 +43,7 @@ private final class RateRecorder: AudioPlaying, @unchecked Sendable {
 @MainActor @Test func aSpeechRequestCanAskForALowerVolume() async {
     let recorder = RateRecorder()
     let speaker = ResponseSpeaker(synthesizer: FakeSynthesizer(), player: recorder)
+    speaker.quietHours.enabled = false   // these tests are about speed and requested volume, not the hour of the day
     let bus = SignalBus()
     let consuming = Task { await speaker.consume(bus) }
     defer { consuming.cancel() }
@@ -293,4 +295,23 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
                                     payload: ["turn_id": "turn/u", "text": "Вера, говори", "addressed": "likely"]))
     #expect(await eventually { !agent.isSilent })
     #expect(await eventually { collector.messages.contains { $0.payload["text"] == "Голос включён" } })
+}
+
+@MainActor @Test func atNightEverythingIsSaidQuieterOnTopOfTheRequestedVolume() async {
+    let recorder = RateRecorder()
+    let speaker = ResponseSpeaker(synthesizer: FakeSynthesizer(), player: recorder)
+    speaker.quietHours.enabled = false   // these tests are about speed and requested volume, not the hour of the day
+    speaker.quietHours.enabled = true
+    func at(_ hour: Int) -> Date { Calendar.current.date(bySettingHour: hour, minute: 30, second: 0, of: Date())! }
+    #expect(QuietHours().level(at: at(15)) == 1)
+    #expect(QuietHours().level(at: at(23)) == 0.6 && QuietHours().level(at: at(2)) == 0.6 && QuietHours().level(at: at(7)) == 1)
+    speaker.clock = { at(2) }
+    await speaker.speak("ночью", volume: 0.5, bus: nil)
+    speaker.clock = { at(15) }
+    await speaker.speak("днём", bus: nil)
+    #expect(recorder.volumes == [0.3, 1])
+    speaker.quietHours.enabled = false
+    speaker.clock = { at(2) }
+    await speaker.speak("выключено", bus: nil)
+    #expect(recorder.volumes.last == 1)
 }

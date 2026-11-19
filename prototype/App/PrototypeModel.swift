@@ -196,14 +196,18 @@ final class PrototypeModel {
         Self.seedSkills(in: skillStore.directory)
         let memory = MemoryStore(directory: runtime.appSupportURL.appending(path: "Memory", directoryHint: .isDirectory))
         let browser = BrowserEngine()
+        let notes = NoteStore(directory: runtime.appSupportURL.appending(path: "Notes", directoryHint: .isDirectory))
+        let agentBox = AgentBox()
         let commandApproval = CommandApproval(workingDirectory: workspace)
         let reminders = ReminderStore(url: runtime.appSupportURL.appending(path: "Memory/reminders.json"))
         self.agent = CoreAgent(
             loop: hasKey ? AgentLoop(model: OpenAICompatibleClient(journal: ModelJournal(directory: runtime.appSupportURL.appending(path: "Journal", directoryHint: .isDirectory))),
                                      tools: WorkspaceTools(root: workspace).registry.adding(.memoryTools(memory)).adding(skillStore.registry).adding(skillStore.writeRegistry).adding(selfModifier.registry)
-                                         .adding(WebTools.registry).adding(.browserTools(BrowserSession(driver: browser))).adding(.commandTools(commandApproval)).adding(.reminderTools(reminders)), systemPrompt: VeraPrompt.system) : nil,
+                                         .adding(WebTools.registry).adding(.browserTools(BrowserSession(driver: browser))).adding(.commandTools(commandApproval)).adding(.macTools).adding(.noteTools(notes))
+                                         .adding(.taskTools { await MainActor.run { agentBox.agent?.statusText() ?? "" } }).adding(.reminderTools(reminders)), systemPrompt: VeraPrompt.system) : nil,
             unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
         self.agent.skills = skillStore
+        agentBox.agent = self.agent
         self.agent.selfModifier = selfModifier
         self.agent.commandApproval = commandApproval
         self.agent.reminders = reminders
@@ -1319,4 +1323,10 @@ final class PrototypeModel {
         """
         try? text.write(to: directory.appending(path: "edit-file.md"), atomically: true, encoding: .utf8)
     }
+}
+
+
+/// Lets the tool that reports on the tasks reach the agent that is built after the tools.
+final class AgentBox: @unchecked Sendable {
+    weak var agent: CoreAgent?
 }

@@ -60,9 +60,15 @@ public struct ShellResult: Sendable {
 /// Runs one command in a shell with a minimal environment: no API keys, no tokens, no inherited secrets.
 public enum ShellRunner {
     public static func run(_ command: String, in directory: URL, timeout: TimeInterval = 30, maxOutput: Int = 6_000) -> ShellResult {
+        exec("/bin/zsh", ["-c", command], in: directory, timeout: timeout, maxOutput: maxOutput)
+    }
+
+    /// One program with its arguments and no shell at all: nothing in an argument can be read as a command.
+    public static func exec(_ path: String, _ arguments: [String], in directory: URL = FileManager.default.temporaryDirectory,
+                            timeout: TimeInterval = 30, maxOutput: Int = 6_000) -> ShellResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
         process.currentDirectoryURL = directory
         process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin", "HOME": NSHomeDirectory(),
                                "LANG": "ru_RU.UTF-8", "TERM": "dumb"]

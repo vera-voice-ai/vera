@@ -608,6 +608,24 @@ public final class CoreAgent {
         return words.allSatisfy { filler.contains($0) }
     }
 
+    /// The work in words: what runs, waits and was finished lately, for «что там с задачей?».
+    public func statusText(now: Date? = nil) -> String {
+        let current = now ?? clock()
+        func shorten(_ text: String) -> String { text.count > 70 ? String(text.prefix(70)) + "…" : text }
+        var lines: [String] = []
+        for task in tasks.prefix(8) {
+            let age = Int(current.timeIntervalSince(task.startedAt))
+            switch task.state {
+            case .running: lines.append("идёт \(age) с: \(shorten(task.request))")
+            case .queued: lines.append("ждёт в очереди: \(shorten(task.request))")
+            case .done: lines.append("готово, \(task.totalMilliseconds / 1000) с: \(shorten(task.request)) → \(shorten(task.answer))")
+            case .failed: lines.append("не удалось: \(shorten(task.request))")
+            case .cancelled: lines.append("отменено: \(shorten(task.request))")
+            }
+        }
+        return lines.isEmpty ? "задач ещё не было" : lines.joined(separator: "\n")
+    }
+
     /// "Вера, прочитай файл" → "прочитай файл": the address is not part of the task.
     public static func stripAddress(_ text: String) -> String {
         var rest = Substring(text.trimmingCharacters(in: .whitespacesAndNewlines))

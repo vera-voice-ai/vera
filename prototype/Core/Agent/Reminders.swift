@@ -9,6 +9,21 @@ public final class ReminderStore: @unchecked Sendable {
         public let text: String
         /// false: say the text aloud; true: run the text as a task (a request to the agent) at that time.
         public let asTask: Bool
+        /// Comes back every day at the same time (a morning briefing): after it fires it moves to the next day.
+        public let repeatsDaily: Bool
+
+        public init(id: String, dueAt: Date, text: String, asTask: Bool, repeatsDaily: Bool = false) {
+            self.id = id; self.dueAt = dueAt; self.text = text; self.asTask = asTask; self.repeatsDaily = repeatsDaily
+        }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(String.self, forKey: .id)
+            dueAt = try values.decode(Date.self, forKey: .dueAt)
+            text = try values.decode(String.self, forKey: .text)
+            asTask = try values.decode(Bool.self, forKey: .asTask)
+            repeatsDaily = try values.decodeIfPresent(Bool.self, forKey: .repeatsDaily) ?? false
+        }
     }
 
     private let url: URL
@@ -23,8 +38,8 @@ public final class ReminderStore: @unchecked Sendable {
     }
 
     @discardableResult
-    public func add(dueAt: Date, text: String, asTask: Bool) -> Item {
-        let item = Item(id: String(UUID().uuidString.prefix(6)).lowercased(), dueAt: dueAt, text: text, asTask: asTask)
+    public func add(dueAt: Date, text: String, asTask: Bool, repeatsDaily: Bool = false) -> Item {
+        let item = Item(id: String(UUID().uuidString.prefix(6)).lowercased(), dueAt: dueAt, text: text, asTask: asTask, repeatsDaily: repeatsDaily)
         lock.withLock { items.append(item); save() }
         return item
     }
@@ -41,11 +56,20 @@ public final class ReminderStore: @unchecked Sendable {
         }
     }
 
-    /// The reminders whose time has come; they are removed.
-    public func takeDue(now: Date) -> [Item] {
+    /// The reminders whose time has come. A single one is removed; a daily one moves to its next day.
+    public func takeDue(now: Date, calendar: Calendar = .current) -> [Item] {
         lock.withLock {
             let due = items.filter { $0.dueAt <= now }.sorted { $0.dueAt < $1.dueAt }
-            if !due.isEmpty { items.removeAll { $0.dueAt <= now }; save() }
+            if !due.isEmpty {
+                items = items.compactMap { item in
+                    guard item.dueAt <= now else { return item }
+                    guard item.repeatsDaily else { return nil }
+                    var next = item.dueAt
+                    while next <= now { next = calendar.date(byAdding: .day, value: 1, to: next) ?? next.addingTimeInterval(86_400) }
+                    return Item(id: item.id, dueAt: next, text: item.text, asTask: item.asTask, repeatsDaily: true)
+                }
+                save()
+            }
             return due
         }
     }
@@ -77,7 +101,7 @@ struct SetReminderTool: AgentTool {
     let store: ReminderStore
     var definition: ToolDefinition {
         ToolDefinition(name: "set_reminder", description: "Do something later. Give `minutes` from now, or `at` as HH:mm (the next such time). `text` is what to say aloud, or, with as_task true, a request that you will carry out yourself at that time (for example «посмотри погоду в Паттайе и скажи»).",
-                       parametersJSON: #"{"type":"object","properties":{"minutes":{"type":"number"},"at":{"type":"string"},"text":{"type":"string"},"as_task":{"type":"boolean"}},"required":["text"]}"#)
+                       parametersJSON: #"{"type":"object","properties":{"minutes":{"type":"number"},"at":{"type":"string"},"text":{"type":"string"},"as_task":{"type":"boolean"},"repeat":{"type":"string","description":"daily to repeat every day at that time"}},"required":["text"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
         guard let args = WorkspaceTools.arguments(argumentsJSON), let text = (args["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
@@ -87,8 +111,9 @@ struct SetReminderTool: AgentTool {
         guard let due = ReminderStore.dueDate(minutes: minutes, at: args["at"] as? String, now: Date()) else {
             return ToolResult(ok: false, text: "не поняла время: нужны minutes или at в виде HH:mm")
         }
-        let item = store.add(dueAt: due, text: text, asTask: args["as_task"] as? Bool ?? false)
-        return ToolResult(ok: true, text: "запомнила, номер \(item.id), сработает \(Self.format(due))")
+        let daily = (args["repeat"] as? String)?.lowercased() == "daily"
+        let item = store.add(dueAt: due, text: text, asTask: args["as_task"] as? Bool ?? false, repeatsDaily: daily)
+        return ToolResult(ok: true, text: "запомнила, номер \(item.id), сработает \(Self.format(due))" + (daily ? " и потом каждый день" : ""))
     }
     static func format(_ date: Date) -> String {
         let formatter = DateFormatter(); formatter.locale = Locale(identifier: "ru_RU"); formatter.dateFormat = "d MMMM, HH:mm"
@@ -102,7 +127,7 @@ struct ListRemindersTool: AgentTool {
     func run(argumentsJSON: String) -> ToolResult {
         let items = store.list()
         if items.isEmpty { return ToolResult(ok: true, text: "ничего не запланировано") }
-        return ToolResult(ok: true, text: items.map { "\($0.id): \(SetReminderTool.format($0.dueAt)) — \($0.asTask ? "задача" : "сказать"): \($0.text)" }.joined(separator: "\n"))
+        return ToolResult(ok: true, text: items.map { "\($0.id): \(SetReminderTool.format($0.dueAt))\($0.repeatsDaily ? " и каждый день" : "") — \($0.asTask ? "задача" : "сказать"): \($0.text)" }.joined(separator: "\n"))
     }
 }
 

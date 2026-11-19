@@ -26,6 +26,24 @@ public extension AudioPlaying {
     func play(wav: Data, rate: Float, volume: Float) async throws { try await play(wav: wav, rate: rate) }
 }
 
+/// Quiet hours: at night everything she says is turned down, on top of any volume the request asked for.
+public struct QuietHours: Sendable, Equatable {
+    public var enabled = true
+    public var startHour = 23
+    public var endHour = 7
+    /// How loud she is at night compared with the day (1 is the same).
+    public var nightLevel: Float = 0.6
+
+    public init() {}
+
+    public func level(at date: Date, calendar: Calendar = .current) -> Float {
+        guard enabled else { return 1 }
+        let hour = calendar.component(.hour, from: date)
+        let night = startHour > endHour ? (hour >= startHour || hour < endHour) : (hour >= startHour && hour < endHour)
+        return night ? nightLevel : 1
+    }
+}
+
 /// The speaking half of Response. Core asks (`output.speech.requested`, a command only Core may send); this
 /// executes and reports what actually happened as events: started, ended or failed. A command is not a result.
 @MainActor
@@ -48,6 +66,9 @@ public final class ResponseSpeaker {
     public private(set) var utterances: [Utterance] = []
     public var isMuted = false
     public let voice: String
+    public var quietHours = QuietHours()
+    /// The current time; tests replace it.
+    public var clock: () -> Date = { Date() }
     /// Playback speed: 1.0 is as synthesized, 1.05 is 5 % faster. Read for every sentence, so a change is heard at once.
     public var speed: Double = ResponseSpeaker.defaultSpeed
     public static let defaultSpeed = 1.05
@@ -120,7 +141,7 @@ public final class ResponseSpeaker {
         update(id) { $0.state = .speaking; $0.synthesisMilliseconds = synthesisMs }
         await publish("output.speech.started", ["synthesis_ms": "\(synthesisMs)", "chars": "\(text.count)"])
         let playStart = ContinuousClock.now
-        do { try await player.play(wav: wav, rate: Float(speed), volume: volume) } catch {
+        do { try await player.play(wav: wav, rate: Float(speed), volume: volume * quietHours.level(at: clock())) } catch {
             update(id) { $0.state = .failed; $0.error = "\(error)" }
             await publish("output.speech.failed", ["reason": "playback", "error": "\(error)"])
             return
