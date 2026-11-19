@@ -185,3 +185,25 @@ private final class Tape: @unchecked Sendable {
     #expect(await w.until { w.agent.tasks.contains { $0.state == .queued } })
     #expect(await w.until { w.agent.tasks.filter { $0.state == .done }.count == 4 })
 }
+
+@MainActor @Test func s37_aShortReplyToHerQuestionIsTakenAsTheAnswerEvenFromAnUnknownVoice() async {
+    let w = await World(model: Reply(text: "Хочешь, чтобы я запомнила это?")); defer { w.finish() }
+    await w.say("Вера, расскажи про память", addressed: "likely")
+    #expect(await w.until { w.agent.tasks.first?.state == .done })
+    func heard(_ id: String, _ text: String) async {
+        await w.bus.publish(SignalMessage(domain: .scene, source: "t", type: "scene.turn.heard",
+                                          payload: ["turn_id": id, "text": text, "reason": "not_addressed", "speaker": "Неизвестный голос"]))
+    }
+    await heard("turn/h1", "Да")
+    #expect(await w.until { w.agent.tasks.count == 2 })
+    // A long remark is not an answer, and neither is a reply after the window.
+    await w.say("Вера, ещё вопрос", addressed: "likely")
+    #expect(await w.until { w.agent.tasks.filter { $0.state == .done }.count == 3 })
+    await heard("turn/h2", "это совсем другой длинный разговор про что-то своё")
+    try? await Task.sleep(for: .milliseconds(200))
+    #expect(w.agent.tasks.count == 3)
+    await w.advance(CoreAgent.replyWindow + 1)
+    await heard("turn/h3", "Да")
+    try? await Task.sleep(for: .milliseconds(200))
+    #expect(w.agent.tasks.count == 3)
+}

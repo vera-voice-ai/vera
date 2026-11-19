@@ -70,6 +70,10 @@ public final class CoreAgent {
     private var handled: Set<String> = []
     private var pendingScene: [String: CheckedContinuation<String?, Never>] = [:]
     /// At most `maxParallelTasks` tasks run at once; the rest wait in the order heard.
+    /// After a question of hers the owner's next short reply is taken as the answer even when the voice was not recognised:
+    /// "Да" is too short to tell by voice. Valid until this moment.
+    private var awaitingReplyUntil: Date?
+    public static let replyWindow: TimeInterval = 45
     private let runGate = Lane(capacity: CoreAgent.maxParallelTasks)
     public static let maxParallelTasks = 3
     /// Speech is one voice: a task holds the speech lane from its first sentence to its last, so answers never overlap.
@@ -128,6 +132,18 @@ public final class CoreAgent {
             if isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.heard",
                Self.isStopCommand(message.payload["text"] ?? ""), hasSomethingToStop {
                 await cancelAll(bus: bus, reason: "voice")
+                continue
+            }
+            // A short reply to her own question: the scene filed it as "not addressed" (a one-word voice is not recognisable).
+            if isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.heard",
+               let until = awaitingReplyUntil, clock() < until, mode == .ready || mode == .working,
+               message.payload["reason"] == "not_addressed", let heardID = message.payload["turn_id"],
+               (1...4).contains((message.payload["text"] ?? "").split(whereSeparator: { !$0.isLetter }).count),
+               handled.insert(heardID).inserted {
+                awaitingReplyUntil = nil
+                touch()
+                await startTask(request: message.payload["text"] ?? "", turnID: heardID, bus: bus, causation: message.id, readyAt: message.timestamp,
+                                note: "Это короткий ответ Алексея на твой вопрос.", mustAnswer: false)
                 continue
             }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
@@ -520,6 +536,7 @@ public final class CoreAgent {
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))
         let stayedSilent = result.succeeded && Self.isSilenceMarker(result.answer)
+        if result.succeeded, !stayedSilent, result.answer.contains("?") { awaitingReplyUntil = clock().addingTimeInterval(Self.replyWindow) }
         if mode == .ready || mode == .working { touch() }
         if result.succeeded, !stayedSilent { memory?.recordTask(request: request, answer: result.answer) }
         if result.succeeded, !stayedSilent {

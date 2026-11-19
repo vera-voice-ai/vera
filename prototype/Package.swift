@@ -12,11 +12,12 @@ let package = Package(
         .target(name: "SceneAnalyzers", dependencies: ["Scene", "Sensors"], path: "SceneAnalyzers", resources: [.copy("Workers")]),
         .target(name: "Core", dependencies: ["SignalBus"], path: "Core"),
         .target(name: "Response", dependencies: ["SignalBus"], path: "Response"),
+        .target(name: "Browser", dependencies: ["Core"], path: "Browser"),
         .target(name: "HarnessKit", dependencies: ["Scene", "SignalBus"], path: "Harness/Kit"),
         .executableTarget(name: "Harness", dependencies: ["HarnessKit"], path: "Harness/CLI"),
         .target(name: "TaskKit", dependencies: ["Core", "SignalBus"], path: "Harness/TaskKit"),
         .executableTarget(name: "TaskBench", dependencies: ["TaskKit", "Core", "SignalBus"], path: "Harness/Tasks"),
-        .executableTarget(name: "VeraSensorPrototype", dependencies: ["SignalBus", "Sensors", "Scene", "SceneAnalyzers", "Core", "Response"], path: "App"),
-        .testTarget(name: "SceneTests", dependencies: ["Scene", "SignalBus", "Sensors", "Core", "Response", "HarnessKit", "TaskKit"], path: "Tests/SceneTests")
+        .executableTarget(name: "VeraSensorPrototype", dependencies: ["SignalBus", "Sensors", "Scene", "SceneAnalyzers", "Core", "Response", "Browser"], path: "App"),
+        .testTarget(name: "SceneTests", dependencies: ["Scene", "SignalBus", "Sensors", "Core", "Response", "HarnessKit", "TaskKit", "Browser"], path: "Tests/SceneTests")
     ]
 )

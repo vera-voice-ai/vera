@@ -10,6 +10,12 @@ public struct ToolResult: Sendable {
 public protocol AgentTool: Sendable {
     var definition: ToolDefinition { get }
     func run(argumentsJSON: String) -> ToolResult
+    /// Tools that must wait for something (a web page, a browser) override this; the others run as they are.
+    func runAsync(argumentsJSON: String) async -> ToolResult
+}
+
+public extension AgentTool {
+    func runAsync(argumentsJSON: String) async -> ToolResult { run(argumentsJSON: argumentsJSON) }
 }
 
 public struct ToolRegistry: Sendable {
@@ -29,6 +35,15 @@ public struct ToolRegistry: Sendable {
             return Self.writeLock.withLock { tool.run(argumentsJSON: call.arguments) }
         }
         return tool.run(argumentsJSON: call.arguments)
+    }
+
+    /// The same, for the agent loop: a tool that waits (the browser) does not hold a thread while it does.
+    public func runAsync(_ call: ToolCall) async -> ToolResult {
+        guard let tool = tools.first(where: { $0.definition.name == call.name }) else {
+            return ToolResult(ok: false, text: "unknown tool \(call.name)")
+        }
+        if Self.writeTools.contains(call.name) { return run(call) }
+        return await tool.runAsync(argumentsJSON: call.arguments)
     }
 }
 
