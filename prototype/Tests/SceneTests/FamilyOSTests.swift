@@ -188,7 +188,7 @@ private let notesJSON = """
     let result = await run(key, "familyos_tasks")
     let lines = result.text.split(separator: "\n").dropFirst()
     #expect(lines.count == 15)
-    #expect(lines.first == "1 | in_progress | Купить молоко | #3")
+    #expect(lines.first == "1 | in_progress | - | Купить молоко | #3")
     #expect(!result.text.contains("Готово") && !result.text.contains("Отменено") && !result.text.contains("Сделано"))
     #expect(FamilyOSStub.requests(for: key).first?.url?.path == "/api/v1/tasks")
 }
@@ -259,4 +259,16 @@ private let notesJSON = """
     for definition in definitions {
         #expect(definition.description.count <= 160, "\(definition.name) description is too long")
     }
+}
+
+@Test func tasksInProgressComeFirstAndTheOwnersBeforeHisAgents() async {
+    let key = "k-order"
+    let stories = [#"{"id": 1, "status": "new", "assignee": "owner", "title": "Новая своя"}"#,
+                   #"{"id": 2, "status": "in_progress", "assignee": "agent", "title": "В работе у агента"}"#,
+                   #"{"id": 3, "status": "in_progress", "assignee": "owner", "title": "В работе своя"}"#,
+                   #"{"id": 4, "status": "hold", "assignee": "owner", "title": "На паузе"}"#]
+    FamilyOSStub.install(key) { _ in (200, json(#"[\#(stories.joined(separator: ","))]"#)) }
+    let result = await run(key, "familyos_tasks")
+    let ids = result.text.split(separator: "\n").dropFirst().compactMap { $0.split(separator: " ").first.map(String.init) }
+    #expect(ids == ["3", "2", "1", "4"])
 }

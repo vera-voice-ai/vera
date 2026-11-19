@@ -254,11 +254,17 @@ struct FamilyOSTasksTool: AgentTool {
             return FamilyOSText.failure(failure.text)
         case let .success(data):
             guard let tasks = FamilyOSText.items(data, keys: ["stories", "tasks", "items"]) else { return FamilyOSText.failure(FamilyOSFailure.badData.text) }
-            let lines = tasks.filter(FamilyOSText.isOpen).prefix(15).map { task -> String in
+            // What is being done now comes first, then new ones, then those on hold; the owner's own before his agents'.
+            func rank(_ task: [String: Any]) -> Int {
+                let order = ["in_progress": 0, "new": 1, "hold": 2]
+                return (order[FamilyOSText.text(task["status"]) ?? ""] ?? 3) * 2 + (FamilyOSText.text(task["assignee"]) == "owner" ? 0 : 1)
+            }
+            let lines = tasks.filter(FamilyOSText.isOpen).sorted { rank($0) < rank($1) }.prefix(15).map { task -> String in
                 let id = FamilyOSText.text(task["id"]) ?? "-"
                 let status = FamilyOSText.text(task["status"]) ?? "-"
                 let title = FamilyOSText.oneLine(FamilyOSText.text(task["title"]) ?? "без названия")
-                return "\(id) | \(status) | \(title) | \(FamilyOSText.project(task))"
+                let who = FamilyOSText.text(task["assignee"]).flatMap { $0.isEmpty ? nil : $0 } ?? "-"
+                return "\(id) | \(status) | \(who) | \(title) | \(FamilyOSText.project(task))"
             }
             return FamilyOSText.answer(lines.isEmpty ? "открытых задач нет" : lines.joined(separator: "\n"))
         }
