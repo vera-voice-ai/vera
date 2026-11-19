@@ -21,3 +21,6 @@ venv/
 
 # Harness scoreboards (generated, local)
 prototype/Evaluation/runs/
+
+# Release archives
+prototype/dist/
