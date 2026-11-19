@@ -75,7 +75,7 @@ struct ContentView: View {
                     GeometryReader { geometry in
                         let unit = (geometry.size.width - 12) / 3
                         HStack(alignment: .top, spacing: 12) {
-                            busContour
+                            BusActivityPanel(monitor: model.busMonitor)
                                 .frame(width: unit * 2, height: 370)
 
                             storageContour
@@ -497,77 +497,6 @@ struct ContentView: View {
         return String(format: " · CPU %.0f%% · %.1f ГБ", usage.cpuPercent, usage.rssMB / 1024)
     }
 
-    private static let tapeHiddenSources: Set<String> = ["Sensors.Microphone", "Sensors.NomoPVAD"]
-
-    private var busContour: some View {
-        let visible = model.busMonitor.messages.filter { !Self.tapeHiddenSources.contains($0.source) }
-        let hiddenCount = model.busMonitor.messages.count - visible.count
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-                    .foregroundStyle(.cyan)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("vera-bus · Vera Signal Bus")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.92))
-                    Text("Текущие сообщения шины · в реальном времени")
-                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
-                }
-                Spacer()
-                Text("\(visible.count) сообщений · чанки/скоры скрыты: \(hiddenCount)")
-                    .font(.system(size: 9, design: .monospaced)).foregroundStyle(.cyan.opacity(0.85))
-            }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 5) {
-                    if visible.isEmpty {
-                        Text("Ожидание сообщений из сенсорного контура")
-                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
-                    } else {
-                        ForEach(visible) { message in busMessageRow(message) }
-                    }
-                }
-            }
-            .scrollIndicators(.automatic)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(Color(red: 0.07, green: 0.08, blue: 0.12), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.cyan.opacity(0.45), style: StrokeStyle(lineWidth: 1.2, dash: [6, 4])))
-    }
-
-    private func busMessageRow(_ message: SignalMessage) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 10) {
-                Text(message.timestamp.formatted(.dateTime.hour().minute().second().secondFraction(.fractional(3))))
-                    .font(.system(size: 9, design: .monospaced)).foregroundStyle(.cyan.opacity(0.78))
-                    .frame(width: 88, alignment: .leading)
-                Text(message.kind.rawValue.uppercased())
-                    .font(.system(size: 8, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.66))
-                    .frame(width: 54, alignment: .leading)
-                Text("\(message.domain.rawValue) · \(message.type)")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(1).truncationMode(.middle)
-                Text(message.source)
-                    .font(.system(size: 8, design: .monospaced)).foregroundStyle(.white.opacity(0.4))
-                    .lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 0)
-            }
-            let preview = payloadPreview(message.payload)
-            if !preview.isEmpty {
-                Text(preview).font(.system(size: 8, design: .monospaced)).foregroundStyle(.white.opacity(0.46))
-                    .lineLimit(1).truncationMode(.middle).padding(.leading, 152)
-            }
-        }
-        .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
-    }
-
-    private func payloadPreview(_ payload: [String: String]) -> String {
-        if let text = payload["text"], !text.isEmpty { return "text: \(text)" }
-        return payload.keys.sorted().filter { $0 != "embedding_json" }
-            .prefix(3).compactMap { key in payload[key].map { "\(key)=\($0)" } }
-            .joined(separator: " · ")
-    }
-
     @ViewBuilder private func moduleContour<Content: View>(name: String, title: String, color: Color,
                                                             @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -811,7 +740,7 @@ struct ContentView: View {
     private var separator: some View { Rectangle().fill(.white.opacity(0.07)).frame(height: 1) }
 }
 
-private extension Color {
+extension Color {
     init(hex: UInt32) {
         self.init(.sRGB,
                   red: Double((hex >> 16) & 0xFF) / 255,
