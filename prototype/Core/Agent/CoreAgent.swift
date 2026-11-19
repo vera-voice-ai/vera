@@ -39,17 +39,24 @@ public final class CoreAgent {
     public private(set) var tasks: [Task] = []
     public private(set) var isEnabled = false
     public private(set) var unavailableReason: String?
-    /// Turns addressed by name (`addressed == likely`) always run as tasks. A continuation (`possible`) runs too, but
-    /// only when `runsAsTask` allows it: the owner's voice clearly above the background and not quieter than usual.
-    public var actsOnPossibleAddress = true
+    /// The mode she is in (ADR-013). She starts in Ready; timers and commands move her between modes.
+    public private(set) var mode: VeraMode = .ready
+    /// When Ready or Working runs out if the owner says nothing more; nil in Silent and Sleep.
+    public private(set) var modeDeadline: Date?
+    /// How long Ready and Working last after the owner's last reply (seconds).
+    public var readyWindow: TimeInterval = 60
+    public var workingWindow: TimeInterval = 600
+    /// The current time; tests replace it to run the timers without waiting.
+    public var clock: () -> Date = { Date() }
+    private var activityAt = Date()
     /// Speak each sentence as soon as the model has written it, instead of the whole answer at the end.
     public var streamsSpeech = true
     /// Facts and finished tasks kept between restarts; nil means Core forgets everything when the app closes.
     public var memory: MemoryStore?
     /// Skills listed to the model by name and description; it loads the full text itself.
     public var skills: SkillStore?
-    /// Silence mode: Vera still works on requests, but nothing is spoken aloud until the owner switches the voice back on.
-    public private(set) var isSilent = false
+    /// Silent: what is running is finished, but nothing is spoken aloud.
+    public var isSilent: Bool { mode == .silent }
     /// Her own source and the gates a change to it passes; nil when she may not change herself.
     public var selfModifier: SelfModifier?
     /// Called after a confirmed change was built, when the app should quit so that the new build can start.
@@ -79,13 +86,27 @@ public final class CoreAgent {
         self.loop = loop
         self.memory = memory
         self.unavailableReason = loop == nil ? (unavailableReason ?? "no model configured") : nil
+        self.modeDeadline = activityAt.addingTimeInterval(readyWindow)
     }
 
     public func setEnabled(_ enabled: Bool) { isEnabled = enabled && loop != nil }
 
     public func consume(_ bus: SignalBus) async {
         let stream = await bus.subscribe()
+        // Without new evidence nothing arrives, so a timer lets Ready and Working run out.
+        let ticker = Swift.Task { @MainActor [weak self] in
+            while !Swift.Task.isCancelled {
+                try? await Swift.Task.sleep(for: .seconds(1))
+                await self?.expireIfNeeded(bus: bus)
+            }
+        }
+        defer { ticker.cancel() }
         for await message in stream {
+            // Switching the microphone on wakes her from sleep.
+            if message.type == "audio.microphone.started", mode == .sleep {
+                await setMode(.ready, bus: bus, reason: "microphone", announce: Self.wakePhrase)
+                continue
+            }
             if message.kind == .reply, message.type == "scene.snapshot", let id = message.correlationID,
                let waiting = pendingScene.removeValue(forKey: id) {
                 waiting.resume(returning: message.payload["context"])
@@ -105,19 +126,22 @@ public final class CoreAgent {
                 continue
             }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
-                  Self.runsAsTask(addressed: message.payload["addressed"] ?? "", loudness: message.payload["loudness_relative"] ?? "",
-                                  aboveFloor: Double(message.payload["loudness_above_floor_db"] ?? ""), allowPossible: actsOnPossibleAddress),
                   let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
-            let text = Self.stripAddress(message.payload["text"] ?? "")
-            // Her name or a greeting alone is an address, not a request: nothing to do, so nothing is said.
-            guard !text.isEmpty, !Self.isOnlyAddress(text) else {
-                await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.turn.ignored",
-                                                subjectID: turnID, causationID: message.id.uuidString.lowercased(),
-                                                payload: ["turn_id": turnID, "reason": text.isEmpty ? "empty" : "only_address"]))
-                continue
+            let rawText = message.payload["text"] ?? ""
+            let activation = Self.isActivation(rawText)
+            let loudness = message.payload["loudness_relative"] ?? ""
+            let aboveFloor = Double(message.payload["loudness_above_floor_db"] ?? "")
+            // Sleep hears nothing. Silent reacts only to the activation phrase. Ready and Working take any reply of the
+            // owner that the loudness rule lets through.
+            switch mode {
+            case .sleep: continue
+            case .silent: guard activation else { continue }
+            case .ready, .working:
+                guard activation || Self.runsAsTask(addressed: message.payload["addressed"] ?? "", loudness: loudness,
+                                                    aboveFloor: aboveFloor, allowPossible: true) else { continue }
             }
-            let note = Self.loudnessNote(message.payload["loudness_relative"] ?? "",
-                                         aboveFloor: Double(message.payload["loudness_above_floor_db"] ?? ""))
+            let text = Self.stripAddress(rawText)
+            let note = Self.loudnessNote(loudness, aboveFloor: aboveFloor)
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
             if Self.isStopCommand(text) {
                 await cancelAll(bus: bus, reason: "voice")
@@ -128,9 +152,25 @@ public final class CoreAgent {
                 continue
             }
             if let change = Self.silenceCommand(text) {
-                await setSilent(change, bus: bus, causation: message.id)
+                await setMode(change ? .silent : .ready, bus: bus, reason: "command", causation: message.id,
+                              announce: change ? Self.silencePhrase : Self.voiceBackPhrase)
                 continue
             }
+            if Self.isSleepCommand(text) {
+                await setMode(.sleep, bus: bus, reason: "command", causation: message.id, announce: Self.sleepPhrase)
+                continue
+            }
+            // Her name or a greeting alone is an address, not a request: it wakes her and she says that she listens.
+            guard !text.isEmpty, !Self.isOnlyAddress(text) else {
+                if mode == .silent { await setMode(.ready, bus: bus, reason: "activation", causation: message.id) }
+                touch()
+                await bus.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                                type: "output.speech.requested", causationID: message.id.uuidString.lowercased(),
+                                                payload: ["text": Self.listeningPhrase]))
+                continue
+            }
+            if mode == .silent { await setMode(.ready, bus: bus, reason: "activation", causation: message.id) }
+            touch()
             let id = Self.taskID(turnID: turnID)
             enqueue(id: id, request: text, readyAt: message.timestamp)
             await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.task.queued",
@@ -149,19 +189,54 @@ public final class CoreAgent {
         }
     }
 
-    /// Enters or leaves silence mode. Entering is announced aloud once ("Режим тишины") and cuts what is being said;
-    /// leaving is announced too, since by then speech is allowed again.
-    public func setSilent(_ silent: Bool, bus: SignalBus?, causation: UUID? = nil) async {
-        guard silent != isSilent else { return }
-        if silent { await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response", type: "output.speech.stop", payload: ["reason": "silence_mode"])) }
-        let phrase = silent ? Self.silencePhrase : Self.voiceBackPhrase
-        if !silent { isSilent = false }
+    /// Switches the mode, tells the bus (`core.mode.changed`, which the scene reads as a fact) and says `announce` if given.
+    /// Silent cuts what is being said; Sleep cancels everything and asks Sensors to stop the microphone.
+    public func setMode(_ new: VeraMode, bus: SignalBus?, reason: String, causation: UUID? = nil, announce: String? = nil) async {
+        let old = mode
+        guard new != old else { touch(); return }
+        if new == .sleep {
+            await cancelAll(bus: bus, reason: "sleep")
+        } else if new == .silent {
+            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                             type: "output.speech.stop", payload: ["reason": "silence_mode"]))
+        }
+        mode = new
+        touch()
         await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.mode.changed",
                                          causationID: causation?.uuidString.lowercased(),
-                                         payload: ["mode": silent ? "silent" : "speaking"]))
-        await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
-                                         type: "output.speech.requested", payload: ["text": phrase, "mode_change": silent ? "silent" : "speaking"]))
-        if silent { isSilent = true }
+                                         payload: ["mode": new.rawValue, "previous": old.rawValue, "reason": reason]))
+        if let announce {
+            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
+                                             type: "output.speech.requested", payload: ["text": announce, "mode_change": new.rawValue]))
+        }
+        if new == .sleep {
+            await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Sensors",
+                                             type: "sensors.microphone.stop", payload: ["reason": reason]))
+        }
+    }
+
+    /// Compatibility for callers that only know silence: Silent on, or back to Ready.
+    public func setSilent(_ silent: Bool, bus: SignalBus?, causation: UUID? = nil) async {
+        await setMode(silent ? .silent : .ready, bus: bus, reason: "command", causation: causation,
+                      announce: silent ? Self.silencePhrase : Self.voiceBackPhrase)
+    }
+
+    /// An owner reply or a finished task restarts the clock of Ready and Working.
+    private func touch() {
+        activityAt = clock()
+        switch mode {
+        case .ready: modeDeadline = activityAt.addingTimeInterval(readyWindow)
+        case .working: modeDeadline = activityAt.addingTimeInterval(workingWindow)
+        case .silent, .sleep: modeDeadline = nil
+        }
+    }
+
+    /// Ready and Working run out to Silent when the owner has said nothing for the whole window and nothing is running.
+    public func expireIfNeeded(bus: SignalBus?) async {
+        guard mode == .ready || mode == .working else { return }
+        if tasks.contains(where: { $0.state == .running || $0.state == .queued }) { touch(); return }
+        guard let deadline = modeDeadline, clock() >= deadline else { return }
+        await setMode(.silent, bus: bus, reason: "timer")
     }
 
     /// The owner's confirmation of a self-change: "применяй", "да, применяй", "применяй изменения".
@@ -190,6 +265,31 @@ public final class CoreAgent {
 
     public static let silencePhrase = "Режим тишины"
     public static let voiceBackPhrase = "Голос включён"
+    public static let listeningPhrase = "Слушаю"
+    public static let sleepPhrase = "Засыпаю"
+    public static let wakePhrase = "Просыпаюсь"
+    /// What the model answers when a reply is plainly not meant for her: nothing is spoken.
+    public static let silenceMarker = "[молчу]"
+    static let wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
+
+    /// The activation phrase: her name among the first three or the last three words of a reply, however long it is.
+    public static func isActivation(_ text: String) -> Bool {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        return words.prefix(3).contains(where: { wakeWords.contains($0) }) || words.suffix(3).contains(where: { wakeWords.contains($0) })
+    }
+
+    /// A short imperative that sends her to sleep: "засыпай", "спи", "иди спать".
+    public static func isSleepCommand(_ text: String) -> Bool {
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        guard (1...5).contains(words.count) else { return false }
+        let joined = words.joined(separator: " ")
+        return ["засыпай", "спи", "иди спать", "ложись спать", "режим сна", "усни"].contains(where: { joined.contains($0) })
+    }
+
+    /// True when the whole answer is the silence marker (the brackets and the case do not matter).
+    public static func isSilenceMarker(_ answer: String) -> Bool {
+        answer.lowercased().filter(\.isLetter) == "молчу"
+    }
 
     /// true = go silent, false = speak again, nil = not a mode command. Short imperatives only, so that a sentence
     /// that merely mentions silence ("в комнате была тишина") is not taken for a command.
@@ -316,6 +416,8 @@ public final class CoreAgent {
             if streams, case let .text(delta) = event { for sentence in chunker.withLock({ $0.feed(delta) }) { sink.yield(sentence) } }
             Swift.Task { @MainActor in
                 if case let .toolCalled(record) = event {
+                    // A request that needed a tool is real work: Ready becomes Working.
+                    if self.mode == .ready { await self.setMode(.working, bus: bus, reason: "task") } else { self.touch() }
                     self.update(id) { $0.toolCalls.append(record) }
                     await bus?.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.tool.called",
                                                      subjectID: id, payload: ["task_id": id, "tool": record.name, "ok": "\(record.ok)",
@@ -342,8 +444,10 @@ public final class CoreAgent {
                                                    "prompt_tokens": "\(result.usage.promptTokens)",
                                                    "completion_tokens": "\(result.usage.completionTokens)",
                                                    "error": result.error ?? ""]))
-        if result.succeeded { memory?.recordTask(request: request, answer: result.answer) }
-        if result.succeeded {
+        let stayedSilent = result.succeeded && Self.isSilenceMarker(result.answer)
+        if mode == .ready || mode == .working { touch() }
+        if result.succeeded, !stayedSilent { memory?.recordTask(request: request, answer: result.answer) }
+        if result.succeeded, !stayedSilent {
             // What the stream did not already cover: a tail without a full stop, or the whole answer when nothing streamed.
             if streams, let tail = chunker.withLock({ $0.flush() }) { sink.yield(tail) }
             if !streams || chunker.withLock({ $0.emitted.isEmpty }) { sink.yield(result.answer) }

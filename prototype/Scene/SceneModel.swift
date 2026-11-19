@@ -77,7 +77,7 @@ public final class SceneModel {
                 await bus.publish(snapshotReply(to: message))
                 continue
             }
-            if message.domain == .sensors || message.type == "scene.turn.verdict",
+            if message.domain == .sensors || message.type == "scene.turn.verdict" || message.type == "core.mode.changed",
                let snapshot = builder.ingest(message) { await accept(snapshot, bus: bus) }
             guard message.domain == .sensors else { continue }
             messages.insert(message, at: 0)

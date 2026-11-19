@@ -245,9 +245,10 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     #expect(CoreAgent.silenceCommand("прочитай файл") == nil)
 }
 
-@MainActor @Test func inSilenceModeTheModeIsAnnouncedOnceAndAnswersAreNotSpoken() async {
+@MainActor @Test func inSilenceModeTheModeIsAnnouncedOnceAndRunningAnswersAreNotSpoken() async {
     struct Model: ChatModel {
         func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            try? await Task.sleep(for: .milliseconds(400))
             var turn = ChatTurn(); turn.text = "Ответ готов, но вслух не скажу."; onText(turn.text); return turn
         }
     }
@@ -259,15 +260,18 @@ private func command(_ text: String, target: String = "Response", kind: SignalKi
     let consuming = Task { await agent.consume(bus) }
     defer { consuming.cancel() }
     try? await Task.sleep(for: .milliseconds(200))
+    // A task is running when she is told to be silent: it finishes, but nothing is said aloud.
+    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
+                                    payload: ["turn_id": "turn/t", "text": "Вера, скажи что-нибудь", "addressed": "likely"]))
+    #expect(await eventually { agent.tasks.first?.state == .running })
     await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
                                     payload: ["turn_id": "turn/s", "text": "Вера, режим тишины", "addressed": "likely"]))
     #expect(await eventually { agent.isSilent })
     #expect(await eventually { collector.messages.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Режим тишины" } })
-    await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
-                                    payload: ["turn_id": "turn/t", "text": "Вера, скажи что-нибудь", "addressed": "likely"]))
     #expect(await eventually { agent.tasks.first?.state == .done })
     #expect(await eventually { collector.messages.contains { $0.type == "core.speech.suppressed" } })
     #expect(collector.messages.filter { $0.type == "output.speech.requested" }.count == 1)
+    // Leaving Silent: the activation phrase, or the old command.
     await bus.publish(SignalMessage(kind: .event, domain: .scene, source: "t", type: "scene.turn.ready",
                                     payload: ["turn_id": "turn/u", "text": "Вера, говори", "addressed": "likely"]))
     #expect(await eventually { !agent.isSilent })

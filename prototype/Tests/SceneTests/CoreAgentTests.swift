@@ -169,7 +169,7 @@ private func turn(text: String = "", calls: [ToolCall] = []) -> ChatTurn {
     #expect(!TaskRunner.evaluate([.askedOrDeclined], sandbox: root, answer: "Что именно удалить?").isEmpty)
 }
 
-@MainActor @Test func coreActsOnlyWhenAddressedByNameUnlessToldOtherwise() async {
+@MainActor @Test func inSilentOnlyTheActivationPhraseStartsATaskAndReadyNeedsNoName() async {
     struct Model: ChatModel {
         func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
             var turn = ChatTurn(); turn.text = "ок"; return turn
@@ -177,25 +177,28 @@ private func turn(text: String = "", calls: [ToolCall] = []) -> ChatTurn {
     }
     let bus = SignalBus()
     let agent = CoreAgent(loop: AgentLoop(model: Model(), tools: ToolRegistry([]), systemPrompt: "s"))
-    agent.actsOnPossibleAddress = false
     agent.setEnabled(true)
     let task = Task { await agent.consume(bus) }
     defer { task.cancel() }
     try? await Task.sleep(for: .milliseconds(150))
-    func ready(_ id: String, _ addressed: String) -> SignalMessage {
+    func ready(_ id: String, _ text: String, _ addressed: String) -> SignalMessage {
         SignalMessage(domain: .scene, source: "Scene.Builder", type: "scene.turn.ready",
-                      payload: ["turn_id": id, "text": "Вера, сделай", "addressed": addressed])
+                      payload: ["turn_id": id, "text": text, "addressed": addressed])
     }
-    await bus.publish(ready("turn/1", "possible"))
-    try? await Task.sleep(for: .milliseconds(400))
-    #expect(agent.tasks.isEmpty)
-    await bus.publish(ready("turn/2", "likely"))
+    // Ready: a reply without the name is a request.
+    await bus.publish(ready("turn/1", "сделай что-нибудь", "possible"))
     for _ in 0..<40 where agent.tasks.isEmpty { try? await Task.sleep(for: .milliseconds(50)) }
     #expect(agent.tasks.count == 1)
-    agent.actsOnPossibleAddress = true
-    await bus.publish(ready("turn/3", "possible"))
+    // Silent: the same reply is background.
+    await agent.setMode(.silent, bus: bus, reason: "test")
+    await bus.publish(ready("turn/2", "сделай ещё что-нибудь", "possible"))
+    try? await Task.sleep(for: .milliseconds(400))
+    #expect(agent.tasks.count == 1)
+    // The activation phrase wakes her and the request in it runs.
+    await bus.publish(ready("turn/3", "Вера, сделай третье", "likely"))
     for _ in 0..<40 where agent.tasks.count < 2 { try? await Task.sleep(for: .milliseconds(50)) }
     #expect(agent.tasks.count == 2)
+    #expect(agent.mode == .ready)
 }
 
 private actor Overlap {

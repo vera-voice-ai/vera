@@ -19,6 +19,7 @@ public struct Configuration: Sendable {
     /// The app's settings, with this configuration's change applied on top.
     public func ttl() -> SceneTTL {
         var ttl = Configuration.appSettings()
+        ttl.initialCoreMode = "silent"   // recordings predate modes: only the activation phrase addresses her
         tweak(&ttl)
         return ttl
     }

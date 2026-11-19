@@ -42,7 +42,7 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
 @MainActor @Test func theSceneDescribesTheSituationForAModelWithoutTheTurnBeingHandled() async {
     let bus = SignalBus(); let seen = Messages()
     let capture = await seen.start(bus)
-    var ttl = SceneTTL(); ttl.verdictTimeout = 0.2
+    var ttl = SceneTTL(); ttl.verdictTimeout = 0.2; ttl.initialCoreMode = "silent"
     let scene = SceneModel(ttl: ttl)
     let sceneTask = Task { await scene.consume(bus) }
     defer { capture.cancel(); sceneTask.cancel() }
@@ -127,7 +127,7 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
 @MainActor @Test func unknownVoicesReachTheModelMarkedAsUnknownWithTheOwnerEstimate() async {
     let bus = SignalBus(); let seen = Messages()
     let capture = await seen.start(bus)
-    var ttl = SceneTTL(); ttl.verdictTimeout = 0.2
+    var ttl = SceneTTL(); ttl.verdictTimeout = 0.2; ttl.initialCoreMode = "silent"
     let scene = SceneModel(ttl: ttl)
     let sceneTask = Task { await scene.consume(bus) }
     defer { capture.cancel(); sceneTask.cancel() }

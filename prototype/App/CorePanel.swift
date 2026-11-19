@@ -18,6 +18,7 @@ struct CorePanel: View {
                 Text("получено к действию: \(inbox.readyCount) · контекст: \(inbox.heardCount)")
                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.55))
             }
+            modeRow
             if let reply = inbox.lastReply {
                 HStack(spacing: 6) {
                     Text("СНИМОК СЦЕНЫ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
@@ -104,12 +105,44 @@ struct CorePanel: View {
             Text("ПАМЯТЬ И НАВЫКИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
             Text("фактов: \(counts?.facts ?? 0) · задач в истории: \(counts?.tasks ?? 0) · навыки: \(skills.isEmpty ? "нет" : skills.joined(separator: ", "))")
                 .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
-            Text(agent.isSilent ? "РЕЖИМ ТИШИНЫ: работает, но вслух не говорит · «Вера, говори» включает голос" : "голос включён · «Вера, режим тишины» выключает озвучку")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(agent.isSilent ? .orange : .white.opacity(0.45))
+            Text("команды: «Вера, режим тишины» · «Вера, засыпай» · «стоп» отменяет задачу и речь")
+                .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             Text("инструменты: read_file, list_dir, write_file, replace_in_file, remember, search_memory, read_skill · голосом «стоп» отменяет задачу и речь")
                 .font(.system(size: 9)).foregroundStyle(.white.opacity(0.42)).lineLimit(2)
         }
         .padding(.top, 4)
+    }
+
+    /// The mode she is in and how long Ready or Working still lasts if the owner says nothing.
+    private var modeRow: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            HStack(spacing: 8) {
+                Circle().fill(Self.modeTint(agent.mode)).frame(width: 8, height: 8)
+                Text("РЕЖИМ · \(agent.mode.title.uppercased())").font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Self.modeTint(agent.mode))
+                Text(modeHint).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var modeHint: String {
+        let left = agent.modeDeadline.map { max(0, Int($0.timeIntervalSinceNow)) }.map { String(format: "ещё %d:%02d", $0 / 60, $0 % 60) } ?? ""
+        switch agent.mode {
+        case .ready: return "отвечает без имени · \(left) · потом Тишина"
+        case .working: return "отвечает без имени · \(left) после последней реплики"
+        case .silent: return "не говорит, задачи доделывает · проснётся по «Вера»"
+        case .sleep: return "не слушает · проснётся, когда включишь микрофон"
+        }
+    }
+
+    private static func modeTint(_ mode: VeraMode) -> Color {
+        switch mode {
+        case .ready: return .green
+        case .working: return .yellow
+        case .silent: return .orange
+        case .sleep: return .gray
+        }
     }
 
     private static func icon(_ state: CoreAgent.Task.State) -> String {

@@ -43,7 +43,8 @@ private func verdict(_ turnID: String, revision: Int, _ choice: String, at secon
 
 /// Feeds messages into a builder and keeps the latest picture and every decision it made.
 private struct TurnScene {
-    var builder = SceneBuilder()
+    /// Starts in Silent: only the activation phrase addresses her, as these tests describe.
+    var builder: SceneBuilder = { var ttl = SceneTTL(); ttl.initialCoreMode = "silent"; return SceneBuilder(ttl: ttl) }()
     var content = SceneContent()
     var decisions: [SceneTurn] = []
 
@@ -203,9 +204,12 @@ private func sceneAfterHandover() throws -> TurnScene {
 
 // MARK: - Engaged conversation
 
-@Test func followUpShortlyAfterHandoverIsPossiblyAddressed() throws {
+@Test func inReadyAFollowUpWithoutTheNameIsPossiblyAddressed() throws {
     var scene = try sceneAfterHandover()
     #expect(scene.states == [.ready(basis: "jev")])
+    // Core is Ready (the owner said hello): any reply of a known voice is addressed to her.
+    scene.feed(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.mode.changed",
+                             timestamp: turnTime(3), payload: ["mode": "ready"]))
 
     // Starts 10 s after the handover, no wake word.
     scene.feed(segmentStarted(2, at: 12.6))
@@ -219,10 +223,12 @@ private func sceneAfterHandover() throws -> TurnScene {
     #expect(scene.decisions.count == 1)
 }
 
-@Test func sameTextSixtySecondsAfterHandoverIsNotAddressed() throws {
+@Test func inSilentTheSameFollowUpIsNotAddressed() throws {
     var scene = try sceneAfterHandover()
+    // Core went silent: only the activation phrase counts now.
+    scene.feed(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.mode.changed",
+                             timestamp: turnTime(3), payload: ["mode": "silent"]))
 
-    // Starts 60 s after the handover, beyond the 45 s engaged window.
     scene.feed(segmentStarted(2, at: 62.6))
     scene.feed(segmentEnded(2, at: 63.6))
     scene.feed(finalText(2, at: 64.1, "а что у тебя нового"))
@@ -382,6 +388,7 @@ private struct OwnerScene {
     var decisions: [SceneTurn] = []
     init(requireOwner: Bool, ttl base: SceneTTL = SceneTTL()) {
         var ttl = base; ttl.requireOwnerPresent = requireOwner
+        ttl.initialCoreMode = "silent"   // only the activation phrase addresses her, as these tests describe
         builder = SceneBuilder(ttl: ttl)
     }
     mutating func send(_ type: String, at t: Double, subject: String? = nil, correlation: String? = nil,

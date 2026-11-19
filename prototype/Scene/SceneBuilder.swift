@@ -36,8 +36,6 @@ public struct SceneTTL: Sendable {
     public var maxHold: TimeInterval = 8
     /// An utterance whose final text never arrives is dropped as `no_text` after this long.
     public var finalTimeout: TimeInterval = 6
-    /// After handing a turn to Core, the next turn of a person counts as addressed for this long.
-    public var engagedWindow: TimeInterval = 45
     /// How long the "handed over" / "background" status is shown after a decision.
     public var statusFlash: TimeInterval = 3
     /// Forms of the assistant's name that mark a turn as addressed to her.
@@ -92,6 +90,9 @@ public struct SceneTTL: Sendable {
     public var turnEndShortcut = false
     /// How long after Vera stops speaking the room still carries her voice (reverb, a late echo).
     public var speechTail: TimeInterval = 1.5
+    /// The mode the scene assumes until Core says otherwise (`core.mode.changed`). The app starts in "ready"; replays of
+    /// sessions recorded before modes existed use "silent", where only the activation phrase addresses her.
+    public var initialCoreMode = "ready"
     public var wakeWords: Set<String> = ["вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
     /// ASR artifacts on silence and noise; a turn made only of these is dropped as `noise`.
     public var noisePhrases: [String] = ["продолжение следует", "субтитры сделал", "субтитры создавал", "спасибо за просмотр"]
@@ -316,8 +317,9 @@ public struct SceneBuilder: Sendable {
     private var lastHandedOverAt: Date?
     /// When Vera spoke: (start, end), end nil while she still does. Her voice reaching the microphone must not become a request.
     private var ownSpeech: [(start: Date, end: Date?)] = []
-    /// When her last sentence ended: the owner's follow-up window counts from here, not from the hand-over.
-    private var lastOwnSpeechEnd: Date?
+    /// The mode Core is in (`core.mode.changed`): in "ready" and "working" the owner needs no name, in "silent" only the
+    /// activation phrase counts. A fact the scene is told, not a decision it takes.
+    private var coreMode: String
     private var lastOwnerSeenAt: Date?
     private var lastOwnerConfirmedAt: Date?
     private var lastHeardAt: Date?
@@ -330,9 +332,13 @@ public struct SceneBuilder: Sendable {
     private var lastLevelCause: UUID?
     private var lastOwnerCause: UUID?
 
-    public init(ttl: SceneTTL = SceneTTL()) { self.ttl = ttl }
+    public init(ttl: SceneTTL = SceneTTL()) { self.ttl = ttl; self.coreMode = ttl.initialCoreMode }
 
     public mutating func ingest(_ message: SignalMessage) -> SceneSnapshot? {
+        if message.domain == .core, message.type == "core.mode.changed" {
+            coreMode = message.payload["mode"] ?? coreMode
+            return nil
+        }
         // The only message from the scene's own domain that the builder consumes: the judge's answer.
         // It is an ordinary recorded message, so replaying a session reproduces the model's decisions.
         if message.domain == .scene, message.type == "scene.turn.verdict" {
@@ -345,7 +351,6 @@ public struct SceneBuilder: Sendable {
             case "output.speech.started": ownSpeech.append((message.timestamp, nil))
             case "output.speech.ended", "output.speech.failed":
                 if let index = ownSpeech.lastIndex(where: { $0.end == nil }) { ownSpeech[index].end = message.timestamp }
-                lastOwnSpeechEnd = message.timestamp
             default: break
             }
             if ownSpeech.count > 20 { ownSpeech.removeFirst(ownSpeech.count - 20) }
@@ -645,10 +650,11 @@ public struct SceneBuilder: Sendable {
     /// Rules only: the assistant's name in the text, or a person continuing a conversation she just had.
     private func addressed(_ turn: SceneTurn, _ now: Date) -> Addressed {
         let words = Self.words(turn.text)
-        if words.contains(where: { ttl.wakeWords.contains($0) }) { return .likely }
-        let anchor = [lastHandedOverAt, lastOwnSpeechEnd].compactMap { $0 }.max()
-        if let anchor, now.timeIntervalSince(anchor) <= ttl.engagedWindow,
-           turn.speakerID != "unknown" { return .possible }
+        // The activation phrase: her name among the first or last three words, however long the reply is.
+        if words.prefix(3).contains(where: { ttl.wakeWords.contains($0) }) || words.suffix(3).contains(where: { ttl.wakeWords.contains($0) }) {
+            return .likely
+        }
+        if coreMode == "ready" || coreMode == "working", turn.speakerID != "unknown" { return .possible }
         return .unlikely
     }
 

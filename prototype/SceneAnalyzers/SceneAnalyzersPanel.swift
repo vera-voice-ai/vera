@@ -311,7 +311,7 @@ public struct SceneAnalyzersPanel: View {
                 countPair("возможно", possible, tint: waitTint)
                 countPair("не ко мне", unlikely, tint: idleTint)
             }
-            Text("имя Веры в тексте, либо разговор в последние \(Int(SceneTTL().engagedWindow)) с")
+            Text("имя Веры в первых или последних трёх словах; в режимах «Готовность» и «В работе» любая реплика владельца")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.46))
                 .lineLimit(2).truncationMode(.tail)

@@ -13,6 +13,7 @@ private struct AudioScene {
 
     init(requireOwner: Bool = false) {
         var ttl = SceneTTL(); ttl.requireOwnerPresent = requireOwner
+        ttl.initialCoreMode = "silent"
         ttl.turnEndShortcut = true   // pinned: these tests describe the shortcut itself, which is off by default
         builder = SceneBuilder(ttl: ttl)
     }

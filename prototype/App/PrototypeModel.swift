@@ -226,6 +226,13 @@ final class PrototypeModel {
         Task { await core.consume(bus) }
         Task { await agent.consume(bus) }
         Task { await speaker.consume(bus) }
+        // Core asks Sensors to stop the microphone when she goes to sleep; switching it on again wakes her.
+        Task { @MainActor [weak self] in
+            guard let bus = self?.bus else { return }
+            for await message in await bus.subscribe() where message.kind == .command && message.type == "sensors.microphone.stop" {
+                self?.stopMicrophone()
+            }
+        }
         // Launch arguments work without a window: a locked screen creates none, and the microphone does not need one.
         Task { @MainActor [weak self] in self?.runAutomationIfRequested() }
         Task { await scene.consume(bus) }
