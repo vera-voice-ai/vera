@@ -1,5 +1,6 @@
 import SwiftUI
 import Core
+import Response
 
 /// The Core tile for now: what has reached Core from the scene, and the round trip of asking the scene for its picture.
 /// It decides nothing.
@@ -7,6 +8,7 @@ struct CorePanel: View {
     let inbox: CoreInbox
     let agent: CoreAgent
     private let accent = Color(red: 0.98, green: 0.80, blue: 0.08)
+    @State private var automationsOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -91,18 +93,49 @@ struct CorePanel: View {
                 }
             }
             memoryRow
+            automationsSection
             Spacer(minLength: 0)
         }
     }
 
-    /// What Core keeps between tasks: remembered facts, task history and the skills it can load.
+    /// What Core keeps between tasks: remembered facts, task history, notes and the skills it can load.
+    /// Refreshed every 5 s, since the numbers are measured from the files on disk.
     private var memoryRow: some View {
-        let counts = agent.memory?.counts
-        let skills = agent.skills?.all().map(\.name) ?? []
-        return VStack(alignment: .leading, spacing: 2) {
-            Text("ПАМЯТЬ И НАВЫКИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
-            Text("фактов: \(counts?.facts ?? 0) · задач в истории: \(counts?.tasks ?? 0) · навыки: \(skills.isEmpty ? "нет" : skills.joined(separator: ", "))")
-                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+        TimelineView(.periodic(from: .now, by: 5)) { _ in
+            let skills = agent.skills?.all().map(\.name) ?? []
+            let metrics = agent.memory.map { memory in
+                // Notes live next to Memory in the app support folder (see PrototypeModel).
+                MemoryMetrics.measure(memory: memory, notesDirectory: memory.directory.deletingLastPathComponent().appending(path: "Notes", directoryHint: .isDirectory))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ПАМЯТЬ И НАВЫКИ").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
+                Text(metrics?.summary ?? "фактов 0 · в контексте ~0 симв. · заметок 0 · задач в истории 0 · 0.0 КБ")
+                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+                Text("навыки: \(skills.isEmpty ? "нет" : skills.joined(separator: ", "))")
+                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// Everything Vera does without the model: a collapsed list, one compact row per rule, timer or filter.
+    private var automationsSection: some View {
+        let quiet = QuietHours()
+        let entries = AutomationRegistry.all(agent: agent, quietHours: (quiet.startHour, quiet.endHour, quiet.nightLevel))
+        return DisclosureGroup(isExpanded: $automationsOpen) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(entries) { entry in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(entry.title).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.88))
+                        Text(entry.trigger).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
+                        Text("выключить: \(entry.howToDisable)").font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.45)).lineLimit(2)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            Text("АВТОМАТИКА · \(entries.count)").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
         }
         .padding(.top, 4)
     }
