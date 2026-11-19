@@ -61,6 +61,9 @@ private final class Messages: @unchecked Sendable {
 @MainActor @Test func sleepCommandsAreShortImperativesAndTheSilenceMarkerIsExact() {
     #expect(CoreAgent.isSleepCommand("Вера, засыпай"))
     #expect(CoreAgent.isSleepCommand("иди спать"))
+    #expect(CoreAgent.isSleepCommand("Вера, спать"))
+    #expect(CoreAgent.isSleepCommand("Спать."))
+    #expect(!CoreAgent.isSleepCommand("я хочу спать"))
     #expect(!CoreAgent.isSleepCommand("вчера я долго не мог уснуть и вообще спал плохо"))
     #expect(CoreAgent.isSilenceMarker("[молчу]"))
     #expect(CoreAgent.isSilenceMarker(" [Молчу]. "))
@@ -71,6 +74,7 @@ private final class Messages: @unchecked Sendable {
     var now = Date(timeIntervalSince1970: 1_000_000)
     let agent = CoreAgent(loop: AgentLoop(model: ScriptedModel(reply: "ок"), tools: ToolRegistry([]), systemPrompt: "s"))
     agent.clock = { now }
+    agent.readyWindow = 60   // the app uses 20 s while the modes are being tested by voice
     await agent.setMode(.ready, bus: nil, reason: "test")
     #expect(agent.mode == .ready)
     now = now.addingTimeInterval(59)
@@ -171,4 +175,18 @@ private final class Messages: @unchecked Sendable {
     #expect(await waitUntil { agent.tasks.first?.state == .done })
     try? await Task.sleep(for: .milliseconds(200))
     #expect(!messages.all.contains { $0.type == "output.speech.requested" })
+}
+
+@MainActor @Test func goingSilentByTheTimerIsAnnouncedAloud() async {
+    var now = Date(timeIntervalSince1970: 3_000_000)
+    let bus = SignalBus(); let messages = Messages()
+    let capture = await messages.start(bus)
+    defer { capture.cancel() }
+    let agent = CoreAgent(loop: AgentLoop(model: ScriptedModel(reply: "ок"), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.clock = { now }
+    await agent.setMode(.ready, bus: bus, reason: "test")
+    now = now.addingTimeInterval(agent.readyWindow + 1)
+    await agent.expireIfNeeded(bus: bus)
+    #expect(agent.mode == .silent)
+    #expect(await waitUntil { messages.all.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Режим тишины" } })
 }

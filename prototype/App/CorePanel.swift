@@ -46,7 +46,7 @@ struct CorePanel: View {
                             Text(event.text).lineLimit(1).truncationMode(.tail)
                                 .font(.system(size: 11)).foregroundStyle(.white.opacity(event.isReady ? 0.88 : 0.5))
                             Spacer(minLength: 6)
-                            Text("\(event.speaker.isEmpty ? "—" : event.speaker) · \(whyText(event))")
+                            Text("\(event.speaker.isEmpty ? "—" : event.speaker) · \(whyText(event))\(event.loudness.isEmpty ? "" : " · " + event.loudness)")
                                 .lineLimit(1).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
                         }
                     }

@@ -44,7 +44,8 @@ public final class CoreAgent {
     /// When Ready or Working runs out if the owner says nothing more; nil in Silent and Sleep.
     public private(set) var modeDeadline: Date?
     /// How long Ready and Working last after the owner's last reply (seconds).
-    public var readyWindow: TimeInterval = 60
+    /// ADR-013 says 60; set to 20 while the modes are being tested by voice.
+    public var readyWindow: TimeInterval = 20
     public var workingWindow: TimeInterval = 600
     /// The current time; tests replace it to run the timers without waiting.
     public var clock: () -> Date = { Date() }
@@ -137,8 +138,7 @@ public final class CoreAgent {
             case .sleep: continue
             case .silent: guard activation else { continue }
             case .ready, .working:
-                guard activation || Self.runsAsTask(addressed: message.payload["addressed"] ?? "", loudness: loudness,
-                                                    aboveFloor: aboveFloor, allowPossible: true) else { continue }
+                guard activation || Self.runsAsTask(addressed: message.payload["addressed"] ?? "") else { continue }
             }
             let text = Self.stripAddress(rawText)
             let note = Self.loudnessNote(loudness, aboveFloor: aboveFloor)
@@ -236,7 +236,7 @@ public final class CoreAgent {
         guard mode == .ready || mode == .working else { return }
         if tasks.contains(where: { $0.state == .running || $0.state == .queued }) { touch(); return }
         guard let deadline = modeDeadline, clock() >= deadline else { return }
-        await setMode(.silent, bus: bus, reason: "timer")
+        await setMode(.silent, bus: bus, reason: "timer", announce: Self.silencePhrase)
     }
 
     /// The owner's confirmation of a self-change: "применяй", "да, применяй", "применяй изменения".
@@ -278,12 +278,16 @@ public final class CoreAgent {
         return words.prefix(3).contains(where: { wakeWords.contains($0) }) || words.suffix(3).contains(where: { wakeWords.contains($0) })
     }
 
-    /// A short imperative that sends her to sleep: "засыпай", "спи", "иди спать".
+    /// A short imperative that sends her to sleep: "спать", "засыпай", "спи", "иди спать", "режим сна". A sentence
+    /// that merely mentions sleep ("хочу спать") is not a command.
     public static func isSleepCommand(_ text: String) -> Bool {
-        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
-        guard (1...5).contains(words.count) else { return false }
+        let filler: Set<String> = ["вера", "вер", "пожалуйста", "ну", "давай", "теперь", "ладно", "а", "уже", "всё", "все"]
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init).filter { !filler.contains($0) }
+        guard (1...4).contains(words.count) else { return false }
         let joined = words.joined(separator: " ")
-        return ["засыпай", "спи", "иди спать", "ложись спать", "режим сна", "усни"].contains(where: { joined.contains($0) })
+        let strong = ["засыпай", "засни", "усни", "спи", "режим сна"]
+        let exact: Set<String> = ["спать", "иди спать", "ложись спать", "пора спать", "иди спи", "переходи в режим сна", "включи режим сна"]
+        return exact.contains(joined) || strong.contains(where: { joined.contains($0) })
     }
 
     /// True when the whole answer is the silence marker (the brackets and the case do not matter).
@@ -475,21 +479,20 @@ public final class CoreAgent {
         change(&tasks[index])
     }
 
-    /// Whether a handed-over turn becomes a task. Addressed by name: always. A continuation (`possible`): only when the
-    /// owner's voice is clearly louder than the background and not quieter than her usual level.
-    public static func runsAsTask(addressed: String, loudness: String, aboveFloor: Double?, allowPossible: Bool) -> Bool {
-        if addressed == "likely" { return true }
-        guard addressed == "possible", allowPossible else { return false }
-        if loudness == "тише обычного" { return false }
-        return (aboveFloor ?? 6) >= 6
+    /// Whether a handed-over turn becomes a task in Ready and Working: addressed by name, or a reply of a known voice.
+    /// Loudness is not a condition: the owner's own speech is often quiet, and a hard threshold cut off real requests.
+    public static func runsAsTask(addressed: String) -> Bool {
+        addressed == "likely" || addressed == "possible"
     }
 
-    /// A line for the model about how loud the turn was, so that quiet speech over loud background is read as background.
+    /// A line for the model about how loud the turn was. Only a quiet turn gets the warning that it may be background.
     public static func loudnessNote(_ relative: String, aboveFloor: Double?) -> String? {
         var parts: [String] = []
         if !relative.isEmpty, relative != "нет базы" { parts.append("громкость: \(relative)") }
         if let aboveFloor { parts.append("на \(Int(aboveFloor.rounded())) дБ выше фона") }
-        return parts.isEmpty ? nil : "Эта реплика (\(parts.joined(separator: ", "))). Тихая речь на громком фоне — скорее фон, а не обращение."
+        guard !parts.isEmpty else { return nil }
+        let quiet = relative == "тише обычного" || (aboveFloor ?? 99) < 4
+        return "Эта реплика (\(parts.joined(separator: ", "))).\(quiet ? " Реплика тихая: возможно, это фон, а не обращение." : "")"
     }
 
     /// Only a name and greetings, with no request in them: "Вера", "Привет, Вера", "Вера, привет!".

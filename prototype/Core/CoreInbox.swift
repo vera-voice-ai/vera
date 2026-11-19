@@ -19,6 +19,8 @@ public final class CoreInbox {
         public let addressed: String
         /// `basis` for ready turns, `reason` for heard ones.
         public let why: String
+        /// Loudness of the turn, ready to show: "−31 дБFS · +9 над фоном · обычно"; empty when it was not measured.
+        public let loudness: String
         public var isReady: Bool { type == "scene.turn.ready" }
     }
 
@@ -64,10 +66,19 @@ public final class CoreInbox {
             received.insert(Received(at: message.timestamp, type: message.type, turnID: message.payload["turn_id"] ?? "",
                                      text: message.payload["text"] ?? "", speaker: message.payload["speaker"] ?? "",
                                      addressed: message.payload["addressed"] ?? "",
-                                     why: message.payload[ready ? "basis" : "reason"] ?? ""), at: 0)
+                                     why: message.payload[ready ? "basis" : "reason"] ?? "",
+                                     loudness: Self.loudnessText(message.payload)), at: 0)
             if received.count > 50 { received.removeLast(received.count - 50) }
             await askForSnapshot(bus)
         }
+    }
+
+    static func loudnessText(_ payload: [String: String]) -> String {
+        guard let db = payload["loudness_db"], let value = Double(db) else { return "" }
+        var parts = [String(format: "%.0f дБFS", value)]
+        if let above = payload["loudness_above_floor_db"], let delta = Double(above) { parts.append(String(format: "%+.0f над фоном", delta)) }
+        if let relative = payload["loudness_relative"], !relative.isEmpty { parts.append(relative) }
+        return parts.joined(separator: " · ")
     }
 
     /// Asks the scene for its current picture; the answer arrives on the bus and lands in `lastReply`.

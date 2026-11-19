@@ -10,13 +10,11 @@ import Scene
     #expect(!CoreAgent.isOnlyAddress("Вера, прочитай файл"))
 }
 
-@MainActor @Test func aContinuationRunsOnlyWhenTheOwnerIsClearlyAboveTheBackground() {
-    #expect(CoreAgent.runsAsTask(addressed: "likely", loudness: "тише обычного", aboveFloor: 1, allowPossible: false))
-    #expect(CoreAgent.runsAsTask(addressed: "possible", loudness: "обычно", aboveFloor: 12, allowPossible: true))
-    #expect(!CoreAgent.runsAsTask(addressed: "possible", loudness: "обычно", aboveFloor: 3, allowPossible: true))
-    #expect(!CoreAgent.runsAsTask(addressed: "possible", loudness: "тише обычного", aboveFloor: 12, allowPossible: true))
-    #expect(!CoreAgent.runsAsTask(addressed: "possible", loudness: "обычно", aboveFloor: 12, allowPossible: false))
-    #expect(!CoreAgent.runsAsTask(addressed: "unlikely", loudness: "громче обычного", aboveFloor: 20, allowPossible: true))
+@MainActor @Test func aKnownVoiceRunsInReadyAndLoudnessIsNotACondition() {
+    #expect(CoreAgent.runsAsTask(addressed: "likely"))
+    #expect(CoreAgent.runsAsTask(addressed: "possible"))
+    #expect(!CoreAgent.runsAsTask(addressed: "unlikely"))
+    #expect(!CoreAgent.runsAsTask(addressed: ""))
 }
 
 @MainActor @Test func loudnessIsComparedWithTheOwnersUsualLevel() {
@@ -31,4 +29,8 @@ import Scene
     #expect(note?.contains("тише обычного") == true)
     #expect(note?.contains("на 2 дБ выше фона") == true)
     #expect(CoreAgent.loudnessNote("нет базы", aboveFloor: nil) == nil)
+    // A loud turn gets the facts without the warning.
+    let loud = CoreAgent.loudnessNote("громче обычного", aboveFloor: 11)
+    #expect(loud?.contains("на 11 дБ выше фона") == true)
+    #expect(loud?.contains("фон, а не обращение") == false)
 }
