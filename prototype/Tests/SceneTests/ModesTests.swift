@@ -193,6 +193,8 @@ private final class Messages: @unchecked Sendable {
     await agent.expireIfNeeded(bus: bus)
     #expect(agent.mode == .silent)
     #expect(await waitUntil { messages.all.contains { $0.type == "output.speech.requested" && $0.payload["text"] == "Режим тишины" } })
+    // Going quiet is said at 78 % volume; other announcements are not turned down.
+    #expect(messages.all.first { $0.payload["text"] == "Режим тишины" }?.payload["volume"] == "0.78")
 }
 
 /// Says "[молчу]" to everything until it is told that silence is not allowed.

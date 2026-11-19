@@ -14,6 +14,8 @@ public protocol AudioPlaying: Sendable {
     func play(wav: Data) async throws
     /// Plays faster or slower; 1.0 is as synthesized. A player without rate control plays at the normal speed.
     func play(wav: Data, rate: Float) async throws
+    /// The same at a given volume, 0 to 1 (1 is as synthesized). A player without volume control plays at full volume.
+    func play(wav: Data, rate: Float, volume: Float) async throws
     /// Cuts the current playback short; `play` then returns.
     func stop() async
 }
@@ -21,6 +23,7 @@ public protocol AudioPlaying: Sendable {
 public extension AudioPlaying {
     func stop() async {}
     func play(wav: Data, rate: Float) async throws { try await play(wav: wav) }
+    func play(wav: Data, rate: Float, volume: Float) async throws { try await play(wav: wav, rate: rate) }
 }
 
 /// The speaking half of Response. Core asks (`output.speech.requested`, a command only Core may send); this
@@ -78,15 +81,16 @@ public final class ResponseSpeaker {
             let previous = playTail
             let mine = generation
             let taskID = message.payload["task_id"]
+            let volume = message.payload["volume"].flatMap(Float.init).map { min(1, max(0.05, $0)) } ?? 1
             playTail = Swift.Task { @MainActor in
                 await previous?.value
                 guard mine == self.generation else { prefetched?.cancel(); return }
-                await self.speak(text, requestID: message.id, taskID: taskID, bus: bus, prefetched: prefetched)
+                await self.speak(text, requestID: message.id, taskID: taskID, volume: volume, bus: bus, prefetched: prefetched)
             }
         }
     }
 
-    public func speak(_ text: String, requestID: UUID = UUID(), taskID: String? = nil, bus: SignalBus?,
+    public func speak(_ text: String, requestID: UUID = UUID(), taskID: String? = nil, volume: Float = 1, bus: SignalBus?,
                       prefetched: Swift.Task<Data, Error>? = nil) async {
         let id = requestID.uuidString.lowercased()
         func publish(_ type: String, _ payload: [String: String]) async {
@@ -116,7 +120,7 @@ public final class ResponseSpeaker {
         update(id) { $0.state = .speaking; $0.synthesisMilliseconds = synthesisMs }
         await publish("output.speech.started", ["synthesis_ms": "\(synthesisMs)", "chars": "\(text.count)"])
         let playStart = ContinuousClock.now
-        do { try await player.play(wav: wav, rate: Float(speed)) } catch {
+        do { try await player.play(wav: wav, rate: Float(speed), volume: volume) } catch {
             update(id) { $0.state = .failed; $0.error = "\(error)" }
             await publish("output.speech.failed", ["reason": "playback", "error": "\(error)"])
             return
@@ -145,13 +149,16 @@ public final class WavPlayer: NSObject, AudioPlaying, AVAudioPlayerDelegate, @un
 
     public override init() { super.init() }
 
-    public func play(wav: Data) async throws { try await play(wav: wav, rate: 1.0) }
+    public func play(wav: Data) async throws { try await play(wav: wav, rate: 1.0, volume: 1) }
 
-    public func play(wav: Data, rate: Float) async throws {
+    public func play(wav: Data, rate: Float) async throws { try await play(wav: wav, rate: rate, volume: 1) }
+
+    public func play(wav: Data, rate: Float, volume: Float) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             DispatchQueue.main.async {
                 do {
                     let player = try AVAudioPlayer(data: wav)
+                    player.volume = min(1, max(0, volume))
                     player.enableRate = true
                     player.rate = min(2.0, max(0.5, rate))
                     player.delegate = self

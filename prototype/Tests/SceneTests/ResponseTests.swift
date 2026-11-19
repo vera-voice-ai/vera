@@ -20,9 +20,12 @@ private struct FakePlayer: AudioPlaying {
 private final class RateRecorder: AudioPlaying, @unchecked Sendable {
     private let lock = NSLock()
     private var seen: [Float] = []
+    private var levels: [Float] = []
     var rates: [Float] { lock.withLock { seen } }
+    var volumes: [Float] { lock.withLock { levels } }
     func play(wav: Data) async throws {}
     func play(wav: Data, rate: Float) async throws { lock.withLock { seen.append(rate) } }
+    func play(wav: Data, rate: Float, volume: Float) async throws { lock.withLock { seen.append(rate); levels.append(volume) } }
 }
 
 @MainActor @Test func theVoiceIsFivePercentFasterByDefaultAndFollowsTheSlider() async {
@@ -33,6 +36,20 @@ private final class RateRecorder: AudioPlaying, @unchecked Sendable {
     speaker.speed = 1.3
     await speaker.speak("два", bus: nil)
     #expect(recorder.rates == [1.05, 1.3])
+    #expect(recorder.volumes == [1, 1])
+}
+
+@MainActor @Test func aSpeechRequestCanAskForALowerVolume() async {
+    let recorder = RateRecorder()
+    let speaker = ResponseSpeaker(synthesizer: FakeSynthesizer(), player: recorder)
+    let bus = SignalBus()
+    let consuming = Task { await speaker.consume(bus) }
+    defer { consuming.cancel() }
+    try? await Task.sleep(for: .milliseconds(150))
+    await bus.publish(SignalMessage(kind: .command, domain: .core, source: "t", target: "Response", type: "output.speech.requested", payload: ["text": "тихо", "volume": "0.78"]))
+    await bus.publish(SignalMessage(kind: .command, domain: .core, source: "t", target: "Response", type: "output.speech.requested", payload: ["text": "обычно"]))
+    for _ in 0..<60 where recorder.volumes.count < 2 { try? await Task.sleep(for: .milliseconds(50)) }
+    #expect(recorder.volumes == [0.78, 1])
 }
 
 /// Collects messages from the bus in the background.

@@ -277,8 +277,11 @@ public final class CoreAgent {
                                          causationID: causation?.uuidString.lowercased(),
                                          payload: ["mode": new.rawValue, "previous": old.rawValue, "reason": reason]))
         if let announce {
+            // Going quiet is said quietly: the phrase that announces Silent is spoken at `quietVolume`.
+            var payload = ["text": announce, "mode_change": new.rawValue]
+            if new == .silent { payload["volume"] = String(Self.quietVolume) }
             await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Response",
-                                             type: "output.speech.requested", payload: ["text": announce, "mode_change": new.rawValue]))
+                                             type: "output.speech.requested", payload: payload))
         }
         if new == .sleep {
             await bus?.publish(SignalMessage(kind: .command, domain: .core, source: "Core.Agent", target: "Sensors",
@@ -334,6 +337,8 @@ public final class CoreAgent {
         }
     }
 
+    /// The volume of the phrase that announces Silent: 78 % of the usual.
+    public static let quietVolume = 0.78
     public static let silencePhrase = "Режим тишины"
     public static let voiceBackPhrase = "Голос включён"
     public static let listeningPhrase = "Слушаю"
