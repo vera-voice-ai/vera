@@ -32,7 +32,7 @@ struct ContentView: View {
                             moduleContour(name: "vera-sensors", title: "Sensors", color: Color(hex: 0x38BDF8)) {
                                 sensorsBody
                             }
-                            .frame(width: unit * 1.5, height: 440)
+                            .frame(width: unit * 1.5, height: 520)
 
                             moduleContour(name: "sensors/analyzers", title: "Анализаторы", color: Color(hex: 0x38BDF8)) {
                                 ScrollView {
@@ -51,15 +51,15 @@ struct ContentView: View {
                                 }
                                     .scrollIndicators(.automatic)
                             }
-                            .frame(width: unit * 2, height: 440)
+                            .frame(width: unit * 2, height: 520)
 
                             moduleContour(name: "vera-response", title: "Response", color: Color(hex: 0x4ADE80)) {
                                 ResponsePanel(speaker: model.speaker, available: model.speechAvailable)
                             }
-                            .frame(width: unit * 1.5, height: 440)
+                            .frame(width: unit * 1.5, height: 520)
                         }
                     }
-                    .frame(height: 440)
+                    .frame(height: 520)
 
                     HStack(alignment: .top, spacing: 12) {
                         moduleContour(name: "vera-scene", title: "Scene", color: Color(hex: 0xA78BFA)) {
@@ -72,6 +72,9 @@ struct ContentView: View {
                         }
                         .frame(maxWidth: .infinity).frame(height: 500)
                     }
+
+                    ToolsPanel(model: model.toolRuns)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
 
                     GeometryReader { geometry in
                         let unit = (geometry.size.width - 12) / 3
@@ -172,7 +175,10 @@ struct ContentView: View {
     }
 
     private var sensorsBody: some View {
-        earsContour
+        VStack(spacing: 10) {
+            earsContour
+            TelegramSensorPanel(model: model.telegramSensor)
+        }
     }
 
     private var micContent: some View {
@@ -213,9 +219,6 @@ struct ContentView: View {
                         }
                     }
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.52))
-                    if !model.telegramStatus.isEmpty {
-                        Text(model.telegramStatus).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.52)).textSelection(.enabled)
-                    }
                     if model.recordingFileName != nil {
                         HStack(spacing: 7) {
                             Circle().fill(model.isMicrophoneListening ? .red : .white.opacity(0.25)).frame(width: 6, height: 6)
