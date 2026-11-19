@@ -36,7 +36,7 @@ public struct AgentLoop: Sendable {
     public let systemPrompt: String
     public let maxSteps: Int
 
-    public init(model: any ChatModel, tools: ToolRegistry, systemPrompt: String, maxSteps: Int = 8) {
+    public init(model: any ChatModel, tools: ToolRegistry, systemPrompt: String, maxSteps: Int = 24) {
         self.model = model; self.tools = tools; self.systemPrompt = systemPrompt; self.maxSteps = maxSteps
     }
 
@@ -59,9 +59,15 @@ public struct AgentLoop: Sendable {
             if Task.isCancelled { result.error = "cancelled"; break }
             onEvent(.modelRequest(step: step))
             result.steps = step
+            // The last step takes the tools away and asks for an answer from what is already known: an exhausted
+            // limit must end in words for the owner, never in silence.
+            let lastStep = step == maxSteps && maxSteps > 1
+            if lastStep {
+                messages.append(ChatMessage(role: .system, content: "Лимит шагов исчерпан, инструменты больше недоступны. Ответь Алексею по-русски по тому, что уже выяснила: что получилось, что нет и что осталось сделать."))
+            }
             let turn: ChatTurn
             do {
-                turn = try await model.respond(messages: messages, tools: tools.definitions) { onEvent(.text($0)) }
+                turn = try await model.respond(messages: messages, tools: lastStep ? [] : tools.definitions) { onEvent(.text($0)) }
             } catch {
                 result.error = Task.isCancelled ? "cancelled" : "\(error)"
                 break

@@ -22,9 +22,16 @@ public enum CommandGate {
         (#"\brm\b.*(\s/(\s|$)|\s~|\$home|\s\*|\s\.\.)"#, "удаление корня, домашней папки или всего подряд запрещено"),
         (#"(curl|wget)[^|]*\|\s*(ba|z)?sh\b"#, "запуск скачанного кода запрещён"),
         (#"\.ssh|\.aws|\.gnupg|id_rsa|id_ed25519|\.netrc|\.npmrc|\.pypirc|keychain|/etc/(passwd|shadow|sudoers)"#, "чужие секреты и ключи недоступны"),
-        (#">\s*/dev/"#, "запись в устройства запрещена"),
+        (#">\s*/dev/(?!null\b)"#, "запись в устройства запрещена"),
         (#"\bch(mod|own)\s+(-\w*r|-r)"#, "рекурсивная смена прав запрещена")
     ]
+
+    /// `git log`, `git status` and the like only read the repository.
+    private static func isReadOnlyGit(_ words: [String]) -> Bool {
+        guard words.first == "git", words.count >= 2 else { return false }
+        return ["log", "status", "diff", "show", "branch", "rev-parse", "describe"].contains(words[1])
+            && !words.contains(where: { $0.hasPrefix("--output") || $0 == "-C" || $0.hasPrefix("--git-dir") || $0.hasPrefix("--work-tree") })
+    }
 
     public static func classify(_ command: String) -> CommandVerdict {
         let text = command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,7 +43,7 @@ public enum CommandGate {
         if text.contains(where: { ";&`<>$()\n".contains($0) }) { return .confirm("составная команда: цепочка, подстановка или перенаправление") }
         for segment in text.split(separator: "|") {
             let words = segment.split(separator: " ").map(String.init)
-            guard let name = words.first, readOnly.contains(name) else {
+            guard let name = words.first, readOnly.contains(name) || isReadOnlyGit(words) else {
                 return .confirm("команда «\(segment.split(separator: " ").first.map(String.init) ?? text)» не из списка безопасных")
             }
             if name == "find", words.contains(where: { ["-exec", "-execdir", "-delete", "-ok", "-fprint"].contains($0) }) {

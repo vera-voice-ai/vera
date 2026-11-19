@@ -91,6 +91,8 @@ private final class ScriptedModel: ChatModel, @unchecked Sendable {
     private var turns: [ChatTurn]
     private var counts: [Int] = []
     var seenMessageCounts: [Int] { lock.withLock { counts } }
+    private var toolCounts: [Int] = []
+    var seenToolCounts: [Int] { lock.withLock { toolCounts } }
     init(_ turns: [ChatTurn]) { self.turns = turns }
     private func next(messageCount: Int) -> ChatTurn? {
         lock.withLock {
@@ -99,6 +101,7 @@ private final class ScriptedModel: ChatModel, @unchecked Sendable {
         }
     }
     func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+        lock.withLock { toolCounts.append(tools.count) }
         guard let turn = next(messageCount: messages.count) else { throw ChatError.badResponse("script exhausted") }
         if !turn.text.isEmpty { onText(turn.text) }
         return turn
@@ -131,6 +134,12 @@ private func turn(text: String = "", calls: [ToolCall] = []) -> ChatTurn {
     let limited = await AgentLoop(model: endless, tools: WorkspaceTools(root: root).registry, systemPrompt: "s", maxSteps: 3).run(request: "x")
     #expect(!limited.succeeded)
     #expect(limited.error == "step limit reached" && limited.steps == 3)
+
+    // On the last step the tools are taken away and the model has to answer: the owner gets words, not silence.
+    let tired = ScriptedModel([turn(calls: [call("list_dir", #"{"path":"."}"#)]), turn(calls: [call("list_dir", #"{"path":"."}"#)]), turn(text: "Нашла не всё, вот что есть.")])
+    let forced = await AgentLoop(model: tired, tools: WorkspaceTools(root: root).registry, systemPrompt: "s", maxSteps: 3).run(request: "x")
+    #expect(forced.succeeded && forced.answer == "Нашла не всё, вот что есть." && forced.steps == 3)
+    #expect(tired.seenToolCounts.last == 0 && tired.seenToolCounts.first! > 0)
 
     let broken = await AgentLoop(model: ScriptedModel([]), tools: WorkspaceTools(root: root).registry, systemPrompt: "s").run(request: "x")
     #expect(!broken.succeeded && broken.error != nil)
