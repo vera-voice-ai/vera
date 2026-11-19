@@ -38,7 +38,7 @@ public protocol BrowserDriving: Sendable {
     func click(_ id: Int) async -> BrowserPage
     func type(_ id: Int, text: String, submit: Bool) async -> BrowserPage
     func back() async -> BrowserPage
-    /// Closes the window and drops everything the page held: the next open starts a fresh browser.
+    /// Closes the window and drops the page. The owner's logins and cookies stay in her profile.
     func close() async
 }
 
@@ -205,7 +205,7 @@ struct BrowserBackTool: AgentTool {
 struct BrowserCloseTool: AgentTool {
     let session: BrowserSession
     var definition: ToolDefinition {
-        ToolDefinition(name: "browser_close", description: "Close the browser window. Everything the pages held is dropped; the next browser_open starts a fresh one. Do it when you are done with the browser or the owner asks.",
+        ToolDefinition(name: "browser_close", description: "Close the browser window and drop the page. The owner's logins stay in the browser, so the next browser_open opens it again with them. Do it when you are done with the browser or the owner asks.",
                        parametersJSON: #"{"type":"object","properties":{}}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "browser tools run asynchronously") }

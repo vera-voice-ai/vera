@@ -85,9 +85,16 @@ private final class FakeBrowser: BrowserDriving, @unchecked Sendable {
 
 // MARK: - The real engine
 
-@MainActor @Test func theRealWebKitEngineReadsClicksAndTypes() async {
-    let engine = BrowserEngine()
+/// An engine that touches neither the owner's defaults nor the persistent profile.
+@MainActor private func testEngine(defaults: UserDefaults? = nil) -> BrowserEngine {
+    let engine = BrowserEngine(defaults: defaults ?? UserDefaults(suiteName: "vera.browser.tests.\(UUID().uuidString)")!,
+                               dataStore: .nonPersistent())
     engine.showsWindow = false
+    return engine
+}
+
+@MainActor @Test func theRealWebKitEngineReadsClicksAndTypes() async {
+    let engine = testEngine()
     let html = """
     <html><head><title>Проба</title></head><body><h1>Заголовок</h1>
     <a href="#x">Ссылка</a><button onclick="document.title='нажато'">Нажать</button>
@@ -111,11 +118,51 @@ private final class FakeBrowser: BrowserDriving, @unchecked Sendable {
 }
 
 @MainActor @Test func anIdleBrowserWindowClosesItself() async {
-    let engine = BrowserEngine()
-    engine.showsWindow = false
+    let engine = testEngine()
     engine.idleLimit = 0.3
     engine.idleCheckInterval = 0.1
     #expect(await engine.loadHTML("<title>Раз</title>").title == "Раз")
     try? await Task.sleep(for: .milliseconds(900))
     #expect(await engine.read().error != nil)               // nobody used it: it closed itself
+}
+
+// MARK: - Her browser profile and window (no visible window needed)
+
+@MainActor @Test func herProfileIsAFixedIdentifierOfHerOwn() {
+    #expect(BrowserEngine.profileIdentifier.uuidString == "6F1C2B7A-4D3E-4A8B-9C5D-2E7F1A0B9D43")
+}
+
+@MainActor @Test func theWindowVisibilityIsRememberedAndShownByDefault() {
+    let suite = "vera.browser.tests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let first = BrowserEngine(defaults: defaults, dataStore: .nonPersistent())
+    #expect(first.isWindowVisible)                          // default: shown
+    first.setWindowVisible(false)
+    #expect(!first.isWindowVisible)
+    #expect(defaults.object(forKey: BrowserEngine.visibleDefaultsKey) as? Bool == false)
+    #expect(!BrowserEngine(defaults: defaults, dataStore: .nonPersistent()).isWindowVisible)   // remembered after restart
+}
+
+@MainActor @Test func aHiddenWindowDoesNotStopTheEngine() async {
+    let engine = testEngine()
+    engine.setWindowVisible(false)
+    #expect(await engine.loadHTML("<title>Скрыто</title><button>Далее</button>").title == "Скрыто")
+    #expect(!engine.isWindowVisible)
+}
+
+@Test func aDownloadIsAnAttachmentWhateverItsType() throws {
+    let url = try #require(URL(string: "https://example.com/file"))
+    let attachment = try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+                                                  headerFields: ["Content-Disposition": "attachment; filename=a.txt"]))
+    let inline = try #require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html"]))
+    #expect(BrowserEngine.isAttachment(attachment))
+    #expect(!BrowserEngine.isAttachment(inline))
+}
+
+@MainActor @Test func clearingHerDataKeepsWorkingAndLeavesNoPage() async {
+    let engine = testEngine()
+    #expect(await engine.loadHTML("<title>Вход</title>").title == "Вход")
+    await engine.clearData()
+    #expect(await engine.read().error != nil)
 }
