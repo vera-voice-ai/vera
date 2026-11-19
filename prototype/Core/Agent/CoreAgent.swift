@@ -93,11 +93,6 @@ public final class CoreAgent {
     private var live: [UUID: Swift.Task<Void, Never>] = [:]
     /// Ask the scene for the situation and pass it to the model with every task.
     public var includesSceneContext = true
-    /// The last time the owner's voice produced a request. Owner near the computer = this was recent.
-    var lastOwnerVoiceAt: Date?
-    /// How long after a voice request the owner counts as sitting next to Vera (seconds).
-    static let ownerNearWindow: TimeInterval = 600
-
     /// How long a task waits for the scene's answer before going on without context.
     public var sceneTimeout: TimeInterval = 1.5
 
@@ -158,15 +153,13 @@ public final class CoreAgent {
                                 note: "Это короткий ответ Алексея на твой вопрос.", mustAnswer: false)
                 continue
             }
-            // A text message of the paired owner (Telegram): authenticated by the channel, so no voice or scene check applies.
-            if isEnabled, message.domain == .sensors, message.kind == .event, message.type == "sensors.text.received",
-               message.payload["authenticated"] == "true", let textTurnID = message.payload["turn_id"], firstTime(textTurnID) {
-                await handleText(message, turnID: textTurnID, bus: bus)
-                continue
-            }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
                   let turnID = message.payload["turn_id"], firstTime(turnID) else { continue }
-            lastOwnerVoiceAt = clock()
+            // A message the owner wrote (Telegram): the scene has already authenticated it and says where he is. No voice rules apply.
+            if message.payload["channel"] != nil, message.payload["authenticated"] == "true" {
+                await handleText(message, turnID: turnID, bus: bus)
+                continue
+            }
             let rawText = message.payload["text"] ?? ""
             let activation = Self.isActivation(rawText)
             let loudness = message.payload["loudness_relative"] ?? ""
@@ -232,7 +225,8 @@ public final class CoreAgent {
             await runApprovedCommand(approval, bus: bus, message: message, turnID: turnID)
             return
         }
-        let near = lastOwnerVoiceAt.map { clock().timeIntervalSince($0) < Self.ownerNearWindow } ?? false
+        // The scene says whether he is next to the computer; then the answer is spoken too.
+        let near = message.payload["owner_near"] == "true"
         let note = "Алексей пишет тебе в Телеграм текстом. Ответ уйдёт ему сообщением" + (near ? ", и ещё прозвучит вслух: он рядом." : ".")
             + " Отвечай по делу, можно подробнее, чем голосом, без разметки."
         await startTask(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp, note: note, mustAnswer: true, speaks: near)

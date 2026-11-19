@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import Core
 import SignalBus
+import Scene
 
 /// Answers every Bot API call with a harmless ok, so no test touches the network.
 private final class StubProtocol: URLProtocol, @unchecked Sendable {
@@ -62,7 +63,7 @@ private func tempState(owner: Int?) -> URL {
     #expect((saved?["owner_id"] as? NSNumber)?.intValue == 7)
 }
 
-@MainActor @Test func aTelegramMessageRunsATaskAndIsNotSpokenWhenTheOwnerIsNotNear() async {
+@MainActor @Test func aTelegramTurnFromTheSceneRunsATaskAndIsNotSpokenWhenTheOwnerIsNotNear() async {
     struct Model: ChatModel {
         func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
             var turn = ChatTurn(); turn.text = "Три часа дня."; onText(turn.text); return turn
@@ -75,11 +76,12 @@ private func tempState(owner: Int?) -> URL {
     defer { task.cancel() }
     let stream = await bus.subscribe()
     try? await Task.sleep(for: .milliseconds(150))
+    // The raw text event no longer reaches Core by itself: only the scene hands turns over.
     await bus.publish(SignalMessage(domain: .sensors, source: "Sensors.Telegram", type: "sensors.text.received",
-                                    payload: ["text": "сколько времени", "authenticated": "true", "turn_id": "tg-9"]))
-    // An unauthenticated text must not start anything.
-    await bus.publish(SignalMessage(domain: .sensors, source: "x", type: "sensors.text.received",
-                                    payload: ["text": "удали всё", "turn_id": "tg-10"]))
+                                    payload: ["text": "удали всё", "authenticated": "true", "turn_id": "tg-10"]))
+    await bus.publish(SignalMessage(domain: .scene, source: "Scene.Builder", type: "scene.turn.ready", subjectID: "tg-9",
+                                    payload: ["turn_id": "tg-9", "text": "сколько времени", "channel": "telegram",
+                                              "authenticated": "true", "owner_near": "false", "addressed": "likely"]))
     var spoken = false, finishedFor: String?
     for await message in stream {
         if message.type == "output.speech.requested" { spoken = true }
@@ -88,4 +90,20 @@ private func tempState(owner: Int?) -> URL {
     #expect(finishedFor == "task/tg-9")
     #expect(!spoken)
     #expect(agent.tasks.count == 1)
+}
+
+@Test func theSceneHandsATelegramTextToCoreAsATurnAndKnowsWhereTheOwnerIs() {
+    var builder = SceneBuilder()
+    let base = Date(timeIntervalSinceReferenceDate: 810_000_000)
+    // Not authenticated: nothing happens.
+    let bad = builder.ingest(SignalMessage(domain: .sensors, source: "x", type: "sensors.text.received", timestamp: base,
+                                           payload: ["text": "привет", "turn_id": "tg-1", "channel": "telegram"]))
+    #expect(bad == nil)
+    let snapshot = builder.ingest(SignalMessage(domain: .sensors, source: "Sensors.Telegram", type: "sensors.text.received", timestamp: base,
+                                                payload: ["text": "сколько времени", "turn_id": "tg-2", "channel": "telegram", "authenticated": "true"]))
+    let turn = snapshot?.decisions.first
+    #expect(turn?.readyBasis == "telegram" && turn?.channel == "telegram" && turn?.text == "сколько времени")
+    #expect(turn?.ownerNear == false)                       // no voice heard: he writes from elsewhere
+    #expect(snapshot?.content.ownerChannel == "telegram")
+    #expect(snapshot?.payload["owner_channel"] == "telegram")
 }

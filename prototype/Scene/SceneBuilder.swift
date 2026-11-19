@@ -187,6 +187,10 @@ public struct SceneTurn: Sendable, Equatable, Identifiable {
     public var aboveFloorDB: Double? = nil
     /// Loudness against the owner's recent turns: "тише обычного", "обычно", "громче обычного" or "нет базы".
     public var loudnessRelative: String? = nil
+    /// Where the turn came from when it was not spoken into the microphone ("telegram"); nil for voice.
+    public var channel: String? = nil
+    /// Whether the owner was near the computer when the turn arrived (his voice heard lately). Set for text turns.
+    public var ownerNear: Bool? = nil
 
     public var isAwaiting: Bool { state == .awaiting }
     public var readyBasis: String? {
@@ -237,6 +241,8 @@ public struct SceneContent: Sendable, Equatable {
     /// Who is around: heard within `participantPresence`, newest first. Unrecognised voices are one
     /// shared "unknown voice" entry: without clustering of embeddings they cannot be told apart.
     public var participants: [SceneParticipant] = []
+    /// The channel the owner is writing through right now (a text message within `participantPresence`), for example "telegram".
+    public var ownerChannel: String?
 
     public init() {}
 }
@@ -273,6 +279,7 @@ public struct SceneSnapshot: Sendable, Identifiable {
             result["utterance_speaker"] = id
             result["utterance_speaker_basis"] = active.speakerBasis ?? ""
         }
+        if let channel = content.ownerChannel { result["owner_channel"] = channel }
         result["participants"] = content.participants.map { "\($0.id):\($0.role.rawValue)" }.joined(separator: ",")
         if let speaker = content.speaker {
             result["speaker_candidate"] = speaker.label
@@ -321,6 +328,8 @@ public struct SceneBuilder: Sendable {
     /// activation phrase counts. A fact the scene is told, not a decision it takes.
     private var coreMode: String
     private var lastOwnerSeenAt: Date?
+    /// The last text message of the owner and the channel it came through.
+    private var lastTextChannel: (name: String, at: Date)?
     private var lastOwnerConfirmedAt: Date?
     private var lastHeardAt: Date?
     private var pendingDecisions: [SceneTurn] = []
@@ -389,6 +398,21 @@ public struct SceneBuilder: Sendable {
                 evidence[active.id, default: Evidence()].nomoCount += 1
                 attribute(active.id, at: time)
             }
+        case "sensors.text.received":
+            // Written by the owner through an authenticated channel (Telegram). The text is complete by itself, there is no
+            // voice to judge, so the scene hands it to Core at once, marked with the channel and with whether he is near.
+            guard message.payload["authenticated"] == "true", let id = message.payload["turn_id"],
+                  let text = message.payload["text"], !text.isEmpty, !turns.contains(where: { $0.id == id }) else { return nil }
+            let channel = message.payload["channel"] ?? "text"
+            var turn = SceneTurn(id: id, utteranceIDs: [], speakerID: knownOwner?.id ?? "owner", speakerLabel: knownOwner?.label ?? "владелец",
+                                 text: text, textRevision: 0, addressed: .likely, state: .ready(basis: channel), verdict: nil,
+                                 startedAt: time, endedAt: time, decidedAt: time, needsVerdict: false)
+            turn.channel = channel
+            turn.ownerNear = ownerPresent(time)
+            turns.append(turn)
+            lastHandedOverAt = time
+            lastTextChannel = (channel, time)
+            pendingDecisions.append(turn)
         case "speech.segment.started":
             guard let id = message.subjectID, !utterances.contains(where: { $0.id == id }) else { return nil }
             utterances.append(SceneUtterance(id: id, state: .active, text: "", textIsFinal: false,
@@ -805,6 +829,7 @@ public struct SceneBuilder: Sendable {
         content.speaker = speaker?.value
         content.turns = turns.sorted { $0.endedAt > $1.endedAt }
         content.status = status(now)
+        if let last = lastTextChannel, now.timeIntervalSince(last.at) <= ttl.participantPresence { content.ownerChannel = last.name }
         content.participants = participants.values.sorted {
             $0.lastHeard != $1.lastHeard ? $0.lastHeard > $1.lastHeard : $0.id < $1.id
         }
@@ -816,6 +841,7 @@ public struct SceneBuilder: Sendable {
         var names: [String] = []
         if old.microphoneOn != new.microphoneOn { names.append("microphone") }
         if old.sound != new.sound { names.append("sound") }
+        if old.ownerChannel != new.ownerChannel { names.append("owner_channel") }
         if old.owner != new.owner || old.ownerMean != new.ownerMean { names.append("owner_activity") }
         if old.active != new.active { names.append("utterance") }
         if old.recent != new.recent { names.append("recent") }

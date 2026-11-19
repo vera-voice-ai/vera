@@ -119,6 +119,8 @@ public final class SceneModel {
                 payload["loudness_relative"] = turn.loudnessRelative ?? ""
             }
             if let above = turn.aboveFloorDB { payload["loudness_above_floor_db"] = String(format: "%.1f", above) }
+            if let channel = turn.channel { payload["channel"] = channel; payload["authenticated"] = "true" }
+            if let near = turn.ownerNear { payload["owner_near"] = near ? "true" : "false" }
             if let verdict = turn.verdict {
                 payload["jev_choice"] = verdict.choice
                 payload["jev_confidence"] = String(format: "%.2f", verdict.confidence)
@@ -146,6 +148,7 @@ public final class SceneModel {
         }
         var lines = ["Рядом сейчас: " + (content.participants.isEmpty ? "никого не слышно"
                                           : content.participants.map { "\($0.label) (\(role($0.role)))" }.joined(separator: ", "))]
+        if let channel = content.ownerChannel { lines.append("Владелец сейчас пишет из \(channel == "telegram" ? "Telegram" : channel): это сообщение, а не голос.") }
         let turns = content.turns.reversed().filter { turn in
             guard turn.id != turnID, !turn.text.isEmpty else { return false }
             switch turn.state {
@@ -160,6 +163,7 @@ public final class SceneModel {
                 var kind = "фон"
                 if case .ready = turn.state { kind = "к Вере" }
                 var who = turn.speakerLabel ?? "кто-то (говорящий не определён)"
+                if let channel = turn.channel { who += " (пишет из \(channel == "telegram" ? "Telegram" : channel))" }
                 if turn.speakerID == "unknown" {
                     who = "неопознанный голос" + (turn.ownerProbability.map { ", возможно владелец: \(Int(($0 * 100).rounded()))%" } ?? "")
                 }

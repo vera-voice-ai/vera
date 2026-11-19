@@ -5,11 +5,12 @@ struct BusActivityPanel: View {
     let monitor: BusMonitorModel
     @State private var pausedActivity: [BusSecond]?
     private let accent = Color(red: 0.25, green: 0.80, blue: 0.95)
-    private let lanes: [(SignalDomain, String, Color)] = [
-        (.sensors, "Sensors", Color(hex: 0x38BDF8)),
-        (.scene, "Scene", Color(hex: 0xA78BFA)),
-        (.core, "Core", Color(hex: 0xFACC15)),
-        (.response, "Response", Color(hex: 0x4ADE80))
+    private let lanes: [(String, String, Color)] = [
+        ("sensors", "Sensors", Color(hex: 0x38BDF8)),
+        ("telegram", "Telegram", Color(hex: 0x2AABEE)),
+        ("scene", "Scene", Color(hex: 0xA78BFA)),
+        ("core", "Core", Color(hex: 0xFACC15)),
+        ("response", "Response", Color(hex: 0x4ADE80))
     ]
 
     var body: some View {
@@ -89,8 +90,8 @@ struct BusActivityPanel: View {
                 Text("Временная шкала").font(.system(size: 12, weight: .semibold))
                 Text("Последние 30 с").font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            ForEach(lanes, id: \.0) { domain, name, color in
-                let values = activity.map { $0.counts[domain, default: 0] }
+            ForEach(lanes, id: \.0) { lane, name, color in
+                let values = activity.map { $0.counts[lane, default: 0] }
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
                         Circle().fill(color).frame(width: 6, height: 6)
