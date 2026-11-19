@@ -126,7 +126,14 @@ struct CorePanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(entry.title).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.88))
+                        if let switchID = entry.switchID {
+                            Toggle(isOn: switchBinding(switchID)) {
+                                Text(entry.title).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.88))
+                            }
+                            .toggleStyle(.switch).controlSize(.mini).tint(accent)
+                        } else {
+                            Text(entry.title).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.88))
+                        }
                         Text(entry.trigger).font(.system(size: 10)).foregroundStyle(.white.opacity(0.6)).lineLimit(2)
                         Text("выключить: \(entry.howToDisable)").font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.45)).lineLimit(2)
@@ -138,6 +145,11 @@ struct CorePanel: View {
             Text("АВТОМАТИКА · \(entries.count)").font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(accent.opacity(0.85))
         }
         .padding(.top, 4)
+    }
+
+    /// The on/off state of one automation switch, read and written through the agent's switches.
+    private func switchBinding(_ id: String) -> Binding<Bool> {
+        Binding(get: { agent.switches.isOn(id) }, set: { agent.switches.set(id, $0) })
     }
 
     /// The mode she is in and how long Ready or Working still lasts if the owner says nothing.
@@ -155,9 +167,10 @@ struct CorePanel: View {
 
     private var modeHint: String {
         let left = agent.modeDeadline.map { max(0, Int($0.timeIntervalSinceNow)) }.map { String(format: "ещё %d:%02d", $0 / 60, $0 % 60) } ?? ""
+        let timers = agent.switches.isOn(AutomationSwitches.modeTimers)
         switch agent.mode {
-        case .ready: return "отвечает без имени · \(left) · потом Тишина"
-        case .working: return "отвечает без имени · \(left) после последней реплики"
+        case .ready: return timers ? "отвечает без имени · \(left) · потом Тишина" : "отвечает без имени · таймер выключен"
+        case .working: return timers ? "отвечает без имени · \(left) после последней реплики" : "отвечает без имени · таймер выключен"
         case .silent: return "не говорит, задачи доделывает · проснётся по «Вера»"
         case .sleep: return "не слушает · проснётся, когда включишь микрофон"
         }

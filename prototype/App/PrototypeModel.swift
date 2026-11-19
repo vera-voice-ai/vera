@@ -192,7 +192,9 @@ final class PrototypeModel {
         }
         let hasKey = Secrets.key(named: "OPENCODE_API_KEY") != nil
         self.sileroSpeech = SileroSpeech(runtime: runtime, voice: "baya")
+        let switches = AutomationSwitches(defaults: .standard)
         self.speaker = ResponseSpeaker(synthesizer: SileroSynthesizer(speech: sileroSpeech), player: WavPlayer(), voice: "baya")
+        self.speaker.quietHoursOn = { switches.isOn(AutomationSwitches.quietHours) }
         if let saved = UserDefaults.standard.object(forKey: "VeraVoiceSpeed") as? Double, ResponseSpeaker.speedRange.contains(saved) {
             self.speaker.speed = saved
         }
@@ -214,6 +216,7 @@ final class PrototypeModel {
                                          .adding(.taskTools { await MainActor.run { agentBox.agent?.statusText() ?? "" } }).adding(.reminderTools(reminders)), systemPrompt: VeraPrompt.system) : nil,
             unavailableReason: "нет ключа OPENCODE_API_KEY (окружение или Keychain: space.vera.v2)", memory: memory)
         self.agent.skills = skillStore
+        self.agent.switches = switches
         agentBox.agent = self.agent
         self.agent.selfModifier = selfModifier
         self.agent.commandApproval = commandApproval

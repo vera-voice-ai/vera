@@ -11,9 +11,12 @@ public struct AutomationEntry: Identifiable, Equatable, Sendable {
     public let effect: String
     /// Russian: the voice command, the setting, or «пока только в коде».
     public let howToDisable: String
+    /// The switch in `AutomationSwitches` that the panel shows as a toggle; nil when it can only be changed in code.
+    public let switchID: String?
 
-    public init(id: String, title: String, trigger: String, effect: String, howToDisable: String) {
+    public init(id: String, title: String, trigger: String, effect: String, howToDisable: String, switchID: String? = nil) {
         self.id = id; self.title = title; self.trigger = trigger; self.effect = effect; self.howToDisable = howToDisable
+        self.switchID = switchID
     }
 }
 
@@ -35,7 +38,8 @@ public enum AutomationRegistry {
                 title: "Таймеры режимов",
                 trigger: "«Готовность» \(ready) и «В работе» \(working) после последней реплики владельца или завершённой задачи. Каждая реплика сдвигает таймер.",
                 effect: "Когда время вышло, Вера уходит в «Тишину» и говорит «Режим тишины» (тихо, \(Int((CoreAgent.quietVolume * 100).rounded())) %).",
-                howToDisable: "Пока только в коде: CoreAgent.readyWindow и workingWindow. Голосом можно выйти из режима сейчас: «молчи»."),
+                howToDisable: "Переключатель или голосом: «выключи таймеры режимов», «включи таймеры режимов». Выйти из режима сейчас можно: «молчи».",
+                switchID: AutomationSwitches.modeTimers),
             AutomationEntry(
                 id: "activation.name",
                 title: "Обращение по имени",
@@ -71,7 +75,8 @@ public enum AutomationRegistry {
                 title: "Тихие часы",
                 trigger: "Каждый день с \(night) (QuietHours: startHour, endHour).",
                 effect: "Вся речь звучит на \(nightVolume) громкости поверх громкости, которую запросила задача.",
-                howToDisable: "Пока только в коде: QuietHours.enabled в ResponseSpeaker (Response/ResponseSpeaker.swift)."),
+                howToDisable: "Переключатель или голосом: «выключи тихие часы», «включи тихие часы».",
+                switchID: AutomationSwitches.quietHours),
             AutomationEntry(
                 id: "reminders.ticker",
                 title: "Напоминания",
@@ -83,13 +88,15 @@ public enum AutomationRegistry {
                 title: "Окно ответа на вопрос",
                 trigger: "\(reply) после её вопроса (CoreAgent.replyWindow). Ответ без имени в этом окне принимается.",
                 effect: "Короткая реплика владельца считается ответом, даже если голос распознан плохо.",
-                howToDisable: "Пока только в коде: CoreAgent.replyWindow."),
+                howToDisable: "Переключатель или голосом: «выключи окно ответа», «включи окно ответа». Выключено, короткая реплика без имени игнорируется.",
+                switchID: AutomationSwitches.replyWindow),
             AutomationEntry(
                 id: "silence.option",
                 title: "Вариант «[молчу]»",
                 trigger: "Реплика без имени, которую модель считает бесспорно не обращённой к ней (CoreAgent.silenceOption).",
                 effect: "Ответ «[молчу]» не озвучивается и не записывается в историю задач.",
-                howToDisable: "Пока только в коде: CoreAgent.silenceOption. Не предлагается, когда ее назвали по имени."),
+                howToDisable: "Переключатель или голосом: «выключи вариант молчу», «включи вариант молчу». Не предлагается, когда её назвали по имени.",
+                switchID: AutomationSwitches.silenceOption),
             AutomationEntry(
                 id: "agent.steps",
                 title: "Лимит шагов агента",
