@@ -138,7 +138,8 @@ private final class Tape: @unchecked Sendable {
     await w.say("Вера, режим тишины", addressed: "likely")
     #expect(await w.until { w.agent.mode == .silent && w.tape.spoke("Режим тишины") })
     #expect(await w.until { w.agent.tasks.first?.state == .done })
-    #expect(w.tape.all.contains { $0.type == "core.speech.suppressed" })
+    // The task is marked done a moment before the speaker loop reports the suppressed sentence: wait for it.
+    #expect(await w.until { w.tape.all.contains { $0.type == "core.speech.suppressed" } })
     #expect(!w.tape.spoke("Готово, но вслух нет."))
 }
 
