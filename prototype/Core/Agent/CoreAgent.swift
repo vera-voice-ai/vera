@@ -557,6 +557,7 @@ public final class CoreAgent {
         var context = await sceneContext(bus: bus, excluding: turnID)
         update(id) { $0.contextMilliseconds = Int(Date().timeIntervalSince(contextStart) * 1000) }
         if let catalog = skills?.catalogText() { context = [context, catalog].compactMap { $0 }.joined(separator: "\n") }
+        if let profile = memory?.profileText() { context = [context, profile].compactMap { $0 }.joined(separator: "\n") }
         if let facts = memory?.factsText() { context = [context, facts].compactMap { $0 }.joined(separator: "\n") }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
         if let note { context = [context, note].compactMap { $0 }.joined(separator: "\n") }

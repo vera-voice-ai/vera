@@ -105,3 +105,15 @@ private func fakeModifier(testOutput: String, testCode: Int32 = 0) throws -> (Se
     #expect(!tools.run(ToolCall(id: "1", name: "self_write_file", arguments: #"{"path":"Core/Agent/SelfModifier.swift","content":"y"}"#)).ok)
     #expect(tools.run(ToolCall(id: "2", name: "self_read_file", arguments: #"{"path":"Core/Agent/SelfModifier.swift"}"#)).ok)
 }
+
+@Test func theProfileFileIsShownCappedAndAbsentWhenEmpty() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: "vera-profile-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let memory = MemoryStore(directory: directory)
+    #expect(memory.profileText() == nil)
+    try "  \n".write(to: directory.appending(path: "profile.md"), atomically: true, encoding: .utf8)
+    #expect(memory.profileText() == nil)
+    try String(repeating: "я", count: 6_000).write(to: directory.appending(path: "profile.md"), atomically: true, encoding: .utf8)
+    let text = try #require(memory.profileText())
+    #expect(text.hasPrefix("Профиль Алексея") && text.count < MemoryStore.profileLimit + 120)
+}

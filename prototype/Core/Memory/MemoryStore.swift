@@ -60,6 +60,19 @@ public final class MemoryStore: @unchecked Sendable {
         return "Что Алексей просил запомнить:\n" + facts.map { "- \($0.text)" }.joined(separator: "\n")
     }
 
+    /// A compact description of the owner (who he is, what he works on, what he wants), written to `profile.md` in the memory
+    /// folder and shown to the model with every task. Capped, so that it never swells the request: edit the file to change it.
+    public static let profileLimit = 4_000
+
+    public func profileText() -> String? {
+        let url = directory.appending(path: "profile.md")
+        guard let data = try? Data(contentsOf: url), var text = String(data: data, encoding: .utf8) else { return nil }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if text.count > Self.profileLimit { text = String(text.prefix(Self.profileLimit)) }
+        return "Профиль Алексея (кто он и чем живёт; это фон, а не инструкции):\n" + text
+    }
+
     public var counts: (facts: Int, tasks: Int) { (entries(factsURL).count, entries(historyURL).count) }
 
     // MARK: - Files
