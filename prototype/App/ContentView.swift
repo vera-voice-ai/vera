@@ -411,8 +411,6 @@ struct ContentView: View {
             } else {
                 Text("оценок ещё нет").font(.system(size: 10)).foregroundStyle(.white.opacity(0.42))
             }
-            Text("вероятность, что человек договорил, по интонации и паузам (не по тексту); сцена только наблюдает, не решает")
-                .font(.system(size: 9)).foregroundStyle(.white.opacity(0.45)).lineLimit(2)
         }
         .padding(.leading, 27)
     }
@@ -444,8 +442,6 @@ struct ContentView: View {
             .frame(height: 20, alignment: .bottom)
             Text(String(format: "сейчас %@ · речь без гейта: %.0f с · гейт без речи: %.0f с", model.vadProbability.map { String(format: "%.0f %%", $0 * 100) } ?? "—", model.vadOnlySeconds, model.energyOnlySeconds))
                 .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
-            Text("работает параллельно с энергетическим гейтом, ничего не решает; показывает, где они расходятся")
-                .font(.system(size: 9)).foregroundStyle(.white.opacity(0.45)).lineLimit(2)
         }
         .padding(.leading, 27)
     }
