@@ -88,8 +88,8 @@ public struct WorkspaceTools: Sendable {
 struct ReadFileTool: AgentTool {
     let box: WorkspaceTools
     var definition: ToolDefinition {
-        ToolDefinition(name: "read_file", description: "Read a text file from the working folder.",
-                       parametersJSON: #"{"type":"object","properties":{"path":{"type":"string","description":"File path relative to the working folder"}},"required":["path"]}"#)
+        ToolDefinition(name: "read_file", description: "Read a text file. Path is relative to the working folder.",
+                       parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
         guard let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String else { return ToolResult(ok: false, text: "bad arguments: need path") }
@@ -106,7 +106,7 @@ struct ReadFileTool: AgentTool {
 struct ListDirectoryTool: AgentTool {
     let box: WorkspaceTools
     var definition: ToolDefinition {
-        ToolDefinition(name: "list_dir", description: "List the entries of a folder in the working folder (use \".\" for the root). Folders end with /.",
+        ToolDefinition(name: "list_dir", description: "List a folder of the working folder (\".\" is the root); folders end with /.",
                        parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -145,8 +145,8 @@ struct WriteFileTool: AgentTool {
 struct AppendToFileTool: AgentTool {
     let box: WorkspaceTools
     var definition: ToolDefinition {
-        ToolDefinition(name: "append_to_file", description: "Add a line to the end of a file without touching the rest of it. Creates the file if it does not exist. Use this to add a line; do not rewrite the whole file to add one.",
-                       parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"string","description":"The text of the new line, without a line break"}},"required":["path","line"]}"#)
+        ToolDefinition(name: "append_to_file", description: "Add one line (no line breaks) to the end of a file, creating it if needed; do not rewrite the file to add a line.",
+                       parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"string"}},"required":["path","line"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
         guard let args = WorkspaceTools.arguments(argumentsJSON), let path = args["path"] as? String, let line = args["line"] as? String else {
@@ -168,7 +168,7 @@ struct AppendToFileTool: AgentTool {
 struct DeleteFileTool: AgentTool {
     let box: WorkspaceTools
     var definition: ToolDefinition {
-        ToolDefinition(name: "delete_file", description: "Delete a file or a folder of the working folder. It is moved to .trash inside the working folder, not erased, so it can be brought back. Say what you deleted.",
+        ToolDefinition(name: "delete_file", description: "Move a file or folder of the working folder to .trash (not erased, can be restored). Say what you deleted.",
                        parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -193,7 +193,7 @@ struct DeleteFileTool: AgentTool {
 struct ReplaceInFileTool: AgentTool {
     let box: WorkspaceTools
     var definition: ToolDefinition {
-        ToolDefinition(name: "replace_in_file", description: "Replace text in an existing file. `old` must occur exactly once unless replace_all is true. Prefer this to rewriting a whole file.",
+        ToolDefinition(name: "replace_in_file", description: "Replace text in a file: old must occur exactly once unless replace_all is true. Prefer this to rewriting the file.",
                        parametersJSON: #"{"type":"object","properties":{"path":{"type":"string"},"old":{"type":"string"},"new":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["path","old","new"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {

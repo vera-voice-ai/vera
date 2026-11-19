@@ -241,7 +241,7 @@ public enum NoteReviewError: Error, LocalizedError {
 struct AddNoteTool: AgentTool {
     let store: NoteStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "add_note", description: "Write down a thought or a note of the owner with the time. Use when he says «запиши», «заметка», «не забыть».",
+        ToolDefinition(name: "add_note", description: "Write down a note of the owner with the time; use when he says «запиши», «заметка», «не забыть».",
                        parametersJSON: #"{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -255,7 +255,7 @@ struct AddNoteTool: AgentTool {
 struct FindNotesTool: AgentTool {
     let store: NoteStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "find_notes", description: "Find earlier notes by words (what the owner wrote down or said to note), including older notes in the archive (marked «(архив)»). An empty query gives the latest notes.",
+        ToolDefinition(name: "find_notes", description: "Find earlier notes by words, including the archive (marked «(архив)»). An empty query gives the latest notes.",
                        parametersJSON: #"{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -269,7 +269,7 @@ struct FindNotesTool: AgentTool {
 struct ReviewNotesTool: AgentTool {
     let store: NoteStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "review_notes", description: "Read the owner's notes written since the last review (the first review takes the last 14 days). Older notes move to the archive. Then call remember for each lasting fact in them.",
+        ToolDefinition(name: "review_notes", description: "Read the owner's notes since the last review (the first time: last 14 days); older ones move to the archive. Then remember each lasting fact.",
                        parametersJSON: #"{"type":"object","properties":{}}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
@@ -291,7 +291,7 @@ public extension ToolRegistry {
 struct TaskStatusTool: AgentTool {
     let provider: @Sendable () async -> String
     var definition: ToolDefinition {
-        ToolDefinition(name: "list_tasks", description: "What is running, waiting or just finished in your work. The task that asks is in the list as running too: do not count it.",
+        ToolDefinition(name: "list_tasks", description: "Running, waiting and finished work. Do not count the task that asks.",
                        parametersJSON: #"{"type":"object","properties":{}}"#)
     }
     func run(argumentsJSON: String) -> ToolResult { ToolResult(ok: false, text: "runs asynchronously") }

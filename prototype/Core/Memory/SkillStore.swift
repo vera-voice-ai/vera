@@ -48,7 +48,7 @@ public struct SkillStore: Sendable {
 struct ReadSkillTool: AgentTool {
     let store: SkillStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "read_skill", description: "Load the full text of a skill from the list of skills.",
+        ToolDefinition(name: "read_skill", description: "Load the full text of a skill from the skill list.",
                        parametersJSON: #"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {

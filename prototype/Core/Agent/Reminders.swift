@@ -100,8 +100,8 @@ public final class ReminderStore: @unchecked Sendable {
 struct SetReminderTool: AgentTool {
     let store: ReminderStore
     var definition: ToolDefinition {
-        ToolDefinition(name: "set_reminder", description: "Do something later. Give `minutes` from now, or `at` as HH:mm (the next such time). `text` is what to say aloud, or, with as_task true, a request that you will carry out yourself at that time (for example «посмотри погоду в Паттайе и скажи»).",
-                       parametersJSON: #"{"type":"object","properties":{"minutes":{"type":"number"},"at":{"type":"string"},"text":{"type":"string"},"as_task":{"type":"boolean"},"repeat":{"type":"string","description":"daily to repeat every day at that time"}},"required":["text"]}"#)
+        ToolDefinition(name: "set_reminder", description: "Do something later: minutes from now, or at as HH:mm. text is said aloud; with as_task true it is a request you carry out yourself then.",
+                       parametersJSON: #"{"type":"object","properties":{"minutes":{"type":"number"},"at":{"type":"string"},"text":{"type":"string"},"as_task":{"type":"boolean"},"repeat":{"type":"string","description":"daily: every day at that time"}},"required":["text"]}"#)
     }
     func run(argumentsJSON: String) -> ToolResult {
         guard let args = WorkspaceTools.arguments(argumentsJSON), let text = (args["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
@@ -123,7 +123,7 @@ struct SetReminderTool: AgentTool {
 
 struct ListRemindersTool: AgentTool {
     let store: ReminderStore
-    var definition: ToolDefinition { ToolDefinition(name: "list_reminders", description: "List what is planned for later.", parametersJSON: #"{"type":"object","properties":{}}"#) }
+    var definition: ToolDefinition { ToolDefinition(name: "list_reminders", description: "List planned reminders.", parametersJSON: #"{"type":"object","properties":{}}"#) }
     func run(argumentsJSON: String) -> ToolResult {
         let items = store.list()
         if items.isEmpty { return ToolResult(ok: true, text: "ничего не запланировано") }

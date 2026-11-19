@@ -6,7 +6,7 @@ struct MacControlTool: AgentTool {
     enum Plan: Equatable { case run(String, [String]), refuse(String) }
 
     var definition: ToolDefinition {
-        ToolDefinition(name: "mac_control", description: "Control the Mac. action: volume_set (value 0-100), volume_get, mute, unmute, media_playpause, media_next, media_previous, now_playing (music app: Music or Spotify, default Music; give it as `app`), open_app (value is the application name), notify (value is a short text shown as a notification).",
+        ToolDefinition(name: "mac_control", description: "Control the Mac by action: volume_set (value 0-100), volume_get, mute, unmute, media_playpause, media_next, media_previous, now_playing (app: Music or Spotify, default Music), open_app (value: app name), notify (value: short text).",
                        parametersJSON: #"{"type":"object","properties":{"action":{"type":"string"},"value":{"type":"string"},"app":{"type":"string"}},"required":["action"]}"#)
     }
 
