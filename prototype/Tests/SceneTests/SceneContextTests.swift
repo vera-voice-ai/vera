@@ -102,6 +102,7 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
     let bus = SignalBus(); let seen = SeenMessages()
     let agent = CoreAgent(loop: AgentLoop(model: RecordingModel(seen: seen), tools: ToolRegistry([]), systemPrompt: "s"))
     agent.sceneTimeout = 0.3
+    agent.includesChangelog = false
     agent.setEnabled(true)
     let started = Date()
     _ = await agent.run(request: "x", bus: bus)
@@ -114,6 +115,7 @@ private func sensor(_ type: String, subject: String? = nil, revision: UInt64? = 
     let seen = SeenMessages()
     let agent = CoreAgent(loop: AgentLoop(model: RecordingModel(seen: seen), tools: ToolRegistry([]), systemPrompt: "s"))
     agent.includesSceneContext = false
+    agent.includesChangelog = false
     agent.setEnabled(true)
     _ = await agent.run(request: "поменяй draft на final")
     _ = await agent.run(request: "а теперь верни обратно")

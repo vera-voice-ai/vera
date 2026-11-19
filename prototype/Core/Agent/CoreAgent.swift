@@ -95,6 +95,9 @@ public final class CoreAgent {
     private var live: [UUID: Swift.Task<Void, Never>] = [:]
     /// Ask the scene for the situation and pass it to the model with every task.
     public var includesSceneContext = true
+    /// Her own recent changelog is part of every request (tests that count messages switch it off).
+    public var includesChangelog = true
+
     /// How long a task waits for the scene's answer before going on without context.
     public var sceneTimeout: TimeInterval = 1.5
 
@@ -557,6 +560,7 @@ public final class CoreAgent {
         var context = await sceneContext(bus: bus, excluding: turnID)
         update(id) { $0.contextMilliseconds = Int(Date().timeIntervalSince(contextStart) * 1000) }
         if let catalog = skills?.catalogText() { context = [context, catalog].compactMap { $0 }.joined(separator: "\n") }
+        if includesChangelog { context = [context, VeraChangelog.contextText()].compactMap { $0 }.joined(separator: "\n") }
         if let profile = memory?.profileText() { context = [context, profile].compactMap { $0 }.joined(separator: "\n") }
         if let facts = memory?.factsText() { context = [context, facts].compactMap { $0 }.joined(separator: "\n") }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }

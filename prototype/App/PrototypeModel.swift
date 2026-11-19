@@ -66,6 +66,8 @@ final class PrototypeModel {
     /// DeepSeek balance for the header; the key comes from the Keychain only.
     let deepSeek = DeepSeekBalance()
     var deepSeekState: DeepSeekBalance.State = .unknown
+    let openCodeUsage = OpenCodeUsage()
+    var openCodeState: OpenCodeUsage.State = .unknown
     private var lastTapePosition: AudioTape.Position?
     var recordingFileName: String?
     var recordedMessageCount = 0
@@ -271,6 +273,11 @@ final class PrototypeModel {
             for await state in balance.updates { self?.deepSeekState = state }
         }
         Task { await balance.start() }
+        let openCode = openCodeUsage
+        Task { @MainActor [weak self] in
+            for await state in openCode.updates { self?.openCodeState = state }
+        }
+        Task { await openCode.start() }
         // Core asks Sensors to stop the microphone when she goes to sleep; switching it on again wakes her.
         Task { @MainActor [weak self] in
             guard let bus = self?.bus else { return }

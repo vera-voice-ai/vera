@@ -103,6 +103,15 @@ struct ContentView: View {
         }
     }
 
+    private var openCodeText: (text: String, help: String) {
+        switch model.openCodeState {
+        case .unknown: return ("OpenCode Go —", "расход ещё не запрошен")
+        case .usage(let usage):
+            return ("OpenCode Go: \(usage.display)", "расход подписки: 5 часов, неделя, месяц. Сброс окон: \(usage.rolling.resetsAt) · \(usage.weekly.resetsAt) · \(usage.monthly.resetsAt)")
+        case .failed(let reason): return ("OpenCode Go —", reason)
+        }
+    }
+
     private func usageLabel(_ text: String, help: String) -> some View {
         Text(text)
             .font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(0.8)
@@ -123,7 +132,7 @@ struct ContentView: View {
             Spacer()
             HStack(spacing: 16) {
                 usageLabel(deepSeekText.text, help: deepSeekText.help)
-                usageLabel("OpenCode Go: нет данных", help: "публичного способа узнать расход пока нет")
+                usageLabel(openCodeText.text, help: openCodeText.help)
             }
             HStack(spacing: 6) {
                 Circle().fill(model.isAnalyzing ? .orange : .green).frame(width: 7, height: 7)
