@@ -180,8 +180,24 @@ public struct SceneTurn: Sendable, Equatable, Identifiable {
     /// The scene's own estimate that this turn was spoken by the owner, from the accumulated voice evidence.
     /// Nil when there was no voice evidence. It matters most for turns whose speaker was not identified.
     public var ownerProbability: Double? = nil
+    /// Loudness of the turn (median microphone level while it was spoken), in dBFS; nil when no level was measured.
+    public var loudnessDB: Double? = nil
+    /// How much louder the turn is than the background floor, in dB.
+    public var aboveFloorDB: Double? = nil
+    /// Loudness against the owner's recent turns: "тише обычного", "обычно", "громче обычного" or "нет базы".
+    public var loudnessRelative: String? = nil
 
     public var isAwaiting: Bool { state == .awaiting }
+    public var readyBasis: String? {
+        if case .ready(let basis) = state { return basis }
+        return nil
+    }
+    public var heardReason: String? {
+        if case .heard(let reason) = state { return reason }
+        return nil
+    }
+    public var isReadyTurn: Bool { readyBasis != nil }
+    public var isHeardTurn: Bool { heardReason != nil }
 }
 
 /// The scene in one word, for a person to read at a glance.
@@ -306,6 +322,10 @@ public struct SceneBuilder: Sendable {
     private var lastOwnerConfirmedAt: Date?
     private var lastHeardAt: Date?
     private var pendingDecisions: [SceneTurn] = []
+    /// Microphone levels of the last two minutes: the turn's own loudness and the background floor come from here.
+    private var levelHistory: [(at: Date, rms: Double)] = []
+    /// Loudness of the last turns handed over: the owner's usual level that the next turn is compared with.
+    private var handedLoudness: [Double] = []
     private var turnCounter = 0
     private var lastLevelCause: UUID?
     private var lastOwnerCause: UUID?
@@ -346,6 +366,8 @@ public struct SceneBuilder: Sendable {
         case "audio.input.observed":
             guard let rms = message.payload["rms"].flatMap(Double.init) else { return nil }
             level = (rms, time)
+            levelHistory.append((time, rms))
+            levelHistory.removeAll { time.timeIntervalSince($0.at) > 120 }
             lastLevelCause = message.id
             isCause = false
         case "speaker.target.activity.scored":
@@ -582,8 +604,42 @@ public struct SceneBuilder: Sendable {
         turns[index].state = state
         turns[index].decidedAt = now
         turns[index].needsVerdict = false
+        measureLoudness(index)
         if case .ready = state { lastHandedOverAt = now } else { lastHeardAt = now }
         pendingDecisions.append(turns[index])
+    }
+
+    /// Loudness of a turn in dBFS, compared with the owner's usual level and with the background floor.
+    /// The floor is the quiet 20 % of the last 30 s of microphone levels, so background music counts as background.
+    private mutating func measureLoudness(_ index: Int) {
+        let turn = turns[index]
+        let spoken = levelHistory.filter { $0.at >= turn.startedAt && $0.at <= turn.endedAt }.map(\.rms).sorted()
+        guard !spoken.isEmpty else { return }
+        let db = Self.decibels(spoken[spoken.count / 2])
+        let quiet = levelHistory.filter { turn.endedAt.timeIntervalSince($0.at) <= 30 }.map(\.rms).sorted()
+        let floor = quiet.isEmpty ? nil : Self.decibels(quiet[quiet.count / 5])
+        turns[index].loudnessDB = db
+        turns[index].aboveFloorDB = floor.map { db - $0 }
+        turns[index].loudnessRelative = Self.loudnessLabel(db, baseline: handedLoudness.isEmpty ? nil : Self.median(handedLoudness))
+        if case .ready = turns[index].state, turn.speakerLabel != nil {
+            handedLoudness.append(db)
+            if handedLoudness.count > 10 { handedLoudness.removeFirst() }
+        }
+    }
+
+    static func decibels(_ rms: Double) -> Double { 20 * log10(max(rms, 1e-5)) }
+
+    static func median(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        return sorted[sorted.count / 2]
+    }
+
+    /// Compares a turn with the owner's usual loudness: more than 6 dB quieter or louder is a difference worth telling Core.
+    public static func loudnessLabel(_ db: Double, baseline: Double?) -> String {
+        guard let baseline else { return "нет базы" }
+        if db < baseline - 6 { return "тише обычного" }
+        if db > baseline + 6 { return "громче обычного" }
+        return "обычно"
     }
 
     /// Rules only: the assistant's name in the text, or a person continuing a conversation she just had.

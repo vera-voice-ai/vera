@@ -39,9 +39,9 @@ public final class CoreAgent {
     public private(set) var tasks: [Task] = []
     public private(set) var isEnabled = false
     public private(set) var unavailableReason: String?
-    /// Only turns where the assistant is addressed by name (`addressed == likely`) run as tasks. A turn that merely
-    /// continues a conversation (`possible`) is not an instruction to act: the owner talks a lot near the microphone.
-    public var actsOnPossibleAddress = false
+    /// Turns addressed by name (`addressed == likely`) always run as tasks. A continuation (`possible`) runs too, but
+    /// only when `runsAsTask` allows it: the owner's voice clearly above the background and not quieter than usual.
+    public var actsOnPossibleAddress = true
     /// Speak each sentence as soon as the model has written it, instead of the whole answer at the end.
     public var streamsSpeech = true
     /// Facts and finished tasks kept between restarts; nil means Core forgets everything when the app closes.
@@ -105,10 +105,19 @@ public final class CoreAgent {
                 continue
             }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
-                  actsOnPossibleAddress || message.payload["addressed"] == "likely",
+                  Self.runsAsTask(addressed: message.payload["addressed"] ?? "", loudness: message.payload["loudness_relative"] ?? "",
+                                  aboveFloor: Double(message.payload["loudness_above_floor_db"] ?? ""), allowPossible: actsOnPossibleAddress),
                   let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
             let text = Self.stripAddress(message.payload["text"] ?? "")
-            guard !text.isEmpty else { continue }
+            // Her name or a greeting alone is an address, not a request: nothing to do, so nothing is said.
+            guard !text.isEmpty, !Self.isOnlyAddress(text) else {
+                await bus.publish(SignalMessage(kind: .event, domain: .core, source: "Core.Agent", type: "core.turn.ignored",
+                                                subjectID: turnID, causationID: message.id.uuidString.lowercased(),
+                                                payload: ["turn_id": turnID, "reason": text.isEmpty ? "empty" : "only_address"]))
+                continue
+            }
+            let note = Self.loudnessNote(message.payload["loudness_relative"] ?? "",
+                                         aboveFloor: Double(message.payload["loudness_above_floor_db"] ?? ""))
             // Not awaited here: this loop must stay free to receive the scene's answer to the question the task asks.
             if Self.isStopCommand(text) {
                 await cancelAll(bus: bus, reason: "voice")
@@ -130,7 +139,7 @@ public final class CoreAgent {
             let key = UUID()
             live[key] = Swift.Task { @MainActor in
                 if await self.runGate.acquire() {
-                    _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp)
+                    _ = await self.run(request: text, turnID: turnID, bus: bus, causation: message.id, readyAt: message.timestamp, note: note)
                     await self.runGate.release()
                 } else {
                     self.update(id) { $0.state = .cancelled }
@@ -249,7 +258,8 @@ public final class CoreAgent {
 
     /// Runs one task. Also the entry point for benchmarks.
     @discardableResult
-    public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil, readyAt: Date? = nil) async -> AgentResult {
+    public func run(request: String, turnID: String? = nil, bus: SignalBus? = nil, causation: UUID? = nil, readyAt: Date? = nil,
+                    note: String? = nil) async -> AgentResult {
         guard let loop else {
             var result = AgentResult(); result.error = unavailableReason
             return result
@@ -269,6 +279,7 @@ public final class CoreAgent {
         if let catalog = skills?.catalogText() { context = [context, catalog].compactMap { $0 }.joined(separator: "\n") }
         if let facts = memory?.factsText() { context = [context, facts].compactMap { $0 }.joined(separator: "\n") }
         if let recent = recentTasksText() { context = [context, recent].compactMap { $0 }.joined(separator: "\n") }
+        if let note { context = [context, note].compactMap { $0 }.joined(separator: "\n") }
         // The answer is spoken sentence by sentence as it is written, one command per sentence, in order.
         let chunker = Locked(SpeechChunker())
         let (sentences, sink) = AsyncStream<String>.makeStream()
@@ -358,6 +369,31 @@ public final class CoreAgent {
     private func update(_ id: String, _ change: (inout Task) -> Void) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         change(&tasks[index])
+    }
+
+    /// Whether a handed-over turn becomes a task. Addressed by name: always. A continuation (`possible`): only when the
+    /// owner's voice is clearly louder than the background and not quieter than her usual level.
+    public static func runsAsTask(addressed: String, loudness: String, aboveFloor: Double?, allowPossible: Bool) -> Bool {
+        if addressed == "likely" { return true }
+        guard addressed == "possible", allowPossible else { return false }
+        if loudness == "тише обычного" { return false }
+        return (aboveFloor ?? 6) >= 6
+    }
+
+    /// A line for the model about how loud the turn was, so that quiet speech over loud background is read as background.
+    public static func loudnessNote(_ relative: String, aboveFloor: Double?) -> String? {
+        var parts: [String] = []
+        if !relative.isEmpty, relative != "нет базы" { parts.append("громкость: \(relative)") }
+        if let aboveFloor { parts.append("на \(Int(aboveFloor.rounded())) дБ выше фона") }
+        return parts.isEmpty ? nil : "Эта реплика (\(parts.joined(separator: ", "))). Тихая речь на громком фоне — скорее фон, а не обращение."
+    }
+
+    /// Only a name and greetings, with no request in them: "Вера", "Привет, Вера", "Вера, привет!".
+    public static func isOnlyAddress(_ text: String) -> Bool {
+        let filler: Set<String> = ["привет", "здравствуй", "здравствуйте", "эй", "алло", "доброе", "добрый", "утро", "день", "вечер",
+                                   "вера", "веры", "вере", "веру", "верой", "верочка", "верка", "вер"]
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        return words.allSatisfy { filler.contains($0) }
     }
 
     /// "Вера, прочитай файл" → "прочитай файл": the address is not part of the task.

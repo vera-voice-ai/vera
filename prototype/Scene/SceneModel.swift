@@ -114,6 +114,11 @@ public final class SceneModel {
                 "utterance_ids": turn.utteranceIDs.joined(separator: ","),
                 isReady ? "basis" : "reason": why
             ]
+            if let db = turn.loudnessDB {
+                payload["loudness_db"] = String(format: "%.1f", db)
+                payload["loudness_relative"] = turn.loudnessRelative ?? ""
+            }
+            if let above = turn.aboveFloorDB { payload["loudness_above_floor_db"] = String(format: "%.1f", above) }
             if let verdict = turn.verdict {
                 payload["jev_choice"] = verdict.choice
                 payload["jev_confidence"] = String(format: "%.2f", verdict.confidence)

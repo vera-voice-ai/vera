@@ -177,6 +177,7 @@ private func turn(text: String = "", calls: [ToolCall] = []) -> ChatTurn {
     }
     let bus = SignalBus()
     let agent = CoreAgent(loop: AgentLoop(model: Model(), tools: ToolRegistry([]), systemPrompt: "s"))
+    agent.actsOnPossibleAddress = false
     agent.setEnabled(true)
     let task = Task { await agent.consume(bus) }
     defer { task.cancel() }
