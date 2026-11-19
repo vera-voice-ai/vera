@@ -66,19 +66,31 @@ public struct ShellResult: Sendable {
 
 /// Runs one command in a shell with a minimal environment: no API keys, no tokens, no inherited secrets.
 public enum ShellRunner {
-    public static func run(_ command: String, in directory: URL, timeout: TimeInterval = 30, maxOutput: Int = 6_000) -> ShellResult {
-        exec("/bin/zsh", ["-c", command], in: directory, timeout: timeout, maxOutput: maxOutput)
+    /// `sandboxed: true` runs the command under sandbox-exec with `SandboxProfile` for `directory`.
+    /// It fails closed: if sandbox-exec is missing or does not start, the command is not run without the sandbox.
+    public static func run(_ command: String, in directory: URL, timeout: TimeInterval = 30, maxOutput: Int = 6_000,
+                           sandboxed: Bool = false, sandboxExecutable: String = "/usr/bin/sandbox-exec") -> ShellResult {
+        guard sandboxed else {
+            return exec("/bin/zsh", ["-c", command], in: directory, timeout: timeout, maxOutput: maxOutput)
+        }
+        guard FileManager.default.isExecutableFile(atPath: sandboxExecutable) else {
+            return ShellResult(code: 126, output: "песочница недоступна (\(sandboxExecutable) не найден), команда не выполнена", timedOut: false)
+        }
+        let scratch = SandboxProfile.scratchDirectory()
+        let profile = SandboxProfile.make(workspace: directory, scratch: scratch)
+        return exec(sandboxExecutable, ["-p", profile, "/bin/zsh", "-c", command], in: directory, timeout: timeout, maxOutput: maxOutput,
+                    extraEnvironment: ["TMPDIR": scratch.path])
     }
 
     /// One program with its arguments and no shell at all: nothing in an argument can be read as a command.
     public static func exec(_ path: String, _ arguments: [String], in directory: URL = FileManager.default.temporaryDirectory,
-                            timeout: TimeInterval = 30, maxOutput: Int = 6_000) -> ShellResult {
+                            timeout: TimeInterval = 30, maxOutput: Int = 6_000, extraEnvironment: [String: String] = [:]) -> ShellResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
         process.currentDirectoryURL = directory
         process.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin", "HOME": NSHomeDirectory(),
-                               "LANG": "ru_RU.UTF-8", "TERM": "dumb"]
+                               "LANG": "ru_RU.UTF-8", "TERM": "dumb"].merging(extraEnvironment) { _, new in new }
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
@@ -153,7 +165,8 @@ struct RunCommandTool: AgentTool {
             return ToolResult(ok: true, text: "НЕ ВЫПОЛНЕНО (\(reason)). Команда «\(command)» ждёт слова Алексея. Скажи ему вслух, что именно собираешься выполнить, и попроси сказать «выполняй». Без его слова она не запустится.")
         case .safe:
             let timeout = TimeInterval(min(60, max(1, args["timeout_seconds"] as? Int ?? 30)))
-            let result = ShellRunner.run(command, in: approval.workingDirectory, timeout: timeout)
+            // Commands run by the agent itself stay inside the sandbox (VERA_SANDBOX=off disables it).
+            let result = ShellRunner.run(command, in: approval.workingDirectory, timeout: timeout, sandboxed: SandboxPolicy.enabled)
             return ToolResult(ok: result.code == 0 && !result.timedOut,
                               text: (result.timedOut ? "время вышло, команда остановлена\n" : "код \(result.code)\n") + result.output)
         }
