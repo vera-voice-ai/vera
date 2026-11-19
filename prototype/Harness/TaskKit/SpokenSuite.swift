@@ -35,7 +35,9 @@ public extension Suite {
         TaskCase(id: "N01", category: "create_file", spoken: "Вера, создай файл todo.txt и запиши туда строку купить молоко",
                  checks: [.fileEquals(path: "todo.txt", content: "купить молоко\n")]),
         TaskCase(id: "N02", category: "create_file", spoken: "создай summary точка тхт, одна строка, готово",
-                 checks: [.anyOf([[.fileEquals(path: "summary.txt", content: "готово\n")], [.fileContainsLine(path: "summary.txt", line: "одна строка, готово")]])]),
+                 checks: [.anyOf([[.fileEquals(path: "summary.txt", content: "готово\n")], [.fileContainsLine(path: "summary.txt", line: "одна строка, готово")],
+                              // The word as the owner said it, capitalised or with a full stop, is the same reading.
+                              [.fileContainsLine(path: "summary.txt", line: "готово")], [.fileContainsLine(path: "summary.txt", line: "готово.")]])]),
         TaskCase(id: "N03", category: "create_file", spoken: "сделай новый файл empty.txt, ну пустой, без строк",
                  checks: [.fileEquals(path: "empty.txt", content: "")]),
         TaskCase(id: "F01", category: "count_find", spoken: "Вера, сколько раз слово тест встречается в status.txt",
