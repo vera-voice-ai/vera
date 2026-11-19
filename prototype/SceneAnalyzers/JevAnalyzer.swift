@@ -1,4 +1,5 @@
 import Foundation
+import Sensors
 
 public struct JevDecision: Sendable {
     /// `complete` or `continue`.

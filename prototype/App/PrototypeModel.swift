@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 import Sensors
 import SignalBus
 import Scene
+import SceneAnalyzers
 import Core
 import Response
 
@@ -90,6 +91,9 @@ final class PrototypeModel {
     private var player: AVAudioPlayer?
     private var microphoneCapture: MicrophoneCapture?
     private var audioFeed: FileAudioFeed?
+    private let spectrumAnalyzer = LiveSpectrumAnalyzer()
+    private var spectrumWorkInFlight = false
+    private var spectrumNeedsReset = false
     private var feedURL: URL?
     private var automationStarted = false
     private var nomoPVAD: NomoPVADAnalyzer?
@@ -131,6 +135,8 @@ final class PrototypeModel {
     var microphoneWaveform: [Float] = []
     var microphoneRMS: Float = 0
     var microphonePeak: Float = 0
+    var microphoneDBFS: Float = -120
+    var microphoneSpectrum: [LiveSpectrumFrame] = []
     var targetSpeakerProbability: Double?
     var targetSpeakerHistory: [Double] = []
     var liveGigaAMText = ""
@@ -319,6 +325,10 @@ final class PrototypeModel {
 
     private func startMicrophoneCapture() {
         liveSessionID += 1
+        spectrumAnalyzer.beginSession(liveSessionID)
+        spectrumWorkInFlight = false
+        spectrumNeedsReset = false
+        microphoneSpectrum.removeAll(keepingCapacity: true)
         liveSpeechBuffer.reset()
         pendingLiveGigaAMInterim = nil
         gigaAMReady = false
@@ -524,7 +534,26 @@ final class PrototypeModel {
         if audioFeed == nil, let position = tape.append(pcm16: LiveSpeechBuffer.pcm16(chunk.samples16k)) { lastTapePosition = position }
         microphoneRMS = chunk.rms
         microphonePeak = chunk.peak
+        microphoneDBFS = chunk.rms > 0
+            ? max(-120, min(0, 20 * log10(chunk.rms)))
+            : -120
         microphoneAECActive = chunk.voiceProcessingActive
+        if spectrumWorkInFlight {
+            spectrumNeedsReset = true
+        } else {
+            spectrumWorkInFlight = true
+            let resetHistory = spectrumNeedsReset
+            spectrumNeedsReset = false
+            let analyzer = spectrumAnalyzer
+            let sessionID = liveSessionID
+            let timestamp = Date()
+            let samples16k = chunk.samples16k
+            Task.detached(priority: .utility) { [weak self] in
+                let frame = analyzer.analyze(samples16k, at: timestamp, sessionID: sessionID,
+                                             resetHistoryBeforeAppend: resetHistory)
+                await self?.completeSpectrumWork(frame, sessionID: sessionID)
+            }
+        }
         let payload = ["sample_rate_hz": "16000", "input_rate_hz": "\(Int(chunk.inputSampleRate))",
                        "duration_ms": "160", "rms": String(format: "%.4f", chunk.rms),
                        "peak": String(format: "%.4f", chunk.peak), "aec": "\(chunk.voiceProcessingActive)"]
@@ -1101,6 +1130,13 @@ final class PrototypeModel {
 
     func stopMicrophone() {
         guard isMicrophoneListening || isMicrophoneStarting else { return }
+        spectrumAnalyzer.endSession(liveSessionID)
+        spectrumWorkInFlight = false
+        spectrumNeedsReset = false
+        microphoneSpectrum.removeAll(keepingCapacity: true)
+        microphoneRMS = 0
+        microphonePeak = 0
+        microphoneDBFS = -120
         let wasSpeechActive = liveSpeechBuffer.isSpeechActive
         if let update = liveSpeechBuffer.flush() { handleLiveSpeechUpdate(update) }
         if wasSpeechActive {
@@ -1142,6 +1178,18 @@ final class PrototypeModel {
             recordedMessageCount = await recorder.recordedCount
             await recorder.stop()
             recordedMessageCount = await recorder.recordedCount
+        }
+    }
+
+    private func completeSpectrumWork(_ frame: LiveSpectrumFrame?, sessionID: Int) {
+        guard sessionID == liveSessionID else { return }
+        spectrumWorkInFlight = false
+        guard isMicrophoneListening, let frame else { return }
+        let cutoff = frame.timestamp.addingTimeInterval(-5)
+        microphoneSpectrum.append(frame)
+        microphoneSpectrum.removeAll { $0.timestamp < cutoff }
+        if microphoneSpectrum.count > 32 {
+            microphoneSpectrum.removeFirst(microphoneSpectrum.count - 32)
         }
     }
 

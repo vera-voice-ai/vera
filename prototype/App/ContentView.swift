@@ -2,6 +2,7 @@ import SwiftUI
 import Scene
 import Sensors
 import SignalBus
+import SceneAnalyzers
 
 /// ScrollView, or its plain content: ImageRenderer cannot draw a ScrollView, and the off-screen snapshot needs the content.
 private struct MaybeScroll<Content: View>: View {
@@ -24,35 +25,64 @@ struct ContentView: View {
             header
             MaybeScroll(scrollable: scrollable) {
                 VStack(spacing: 12) {
-                    moduleContour(name: "vera-sensors", title: "Sensors", color: Color(hex: 0x38BDF8)) {
-                        sensorsBody
-                    }
-                    .frame(maxWidth: .infinity).frame(height: 440)
+                    GeometryReader { geometry in
+                        let unit = (geometry.size.width - 24) / 5
+                        HStack(alignment: .top, spacing: 12) {
+                            moduleContour(name: "vera-sensors", title: "Sensors", color: Color(hex: 0x38BDF8)) {
+                                sensorsBody
+                            }
+                            .frame(width: unit * 1.5, height: 440)
 
-                    busContour
-                        .frame(maxWidth: .infinity).frame(height: 165)
+                            moduleContour(name: "sensors/analyzers", title: "Анализаторы", color: Color(hex: 0x38BDF8)) {
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        analyzersContent
+                                        separator
+                                        SceneAnalyzersPanel(
+                                            snapshot: model.scene.snapshot,
+                                            sceneModel: model.scene,
+                                            judgeUsage: model.usageJev.map {
+                                                SceneAnalyzerUsage(cpuPercent: $0.cpuPercent, rssMB: $0.rssMB)
+                                            },
+                                            judgeAvailable: model.runtime.jevAvailable
+                                        )
+                                    }
+                                }
+                                    .scrollIndicators(.automatic)
+                            }
+                            .frame(width: unit * 2, height: 440)
 
-                    moduleContour(name: "vera-scene", title: "Scene", color: Color(hex: 0xA78BFA)) {
-                        ScenePanel(snapshot: model.scene.snapshot,
-                                   sceneModel: model.scene,
-                                   judgeUsage: model.usageJev,
-                                   judgeAvailable: model.runtime.jevAvailable)
+                            moduleContour(name: "vera-response", title: "Response", color: Color(hex: 0x4ADE80)) {
+                                ResponsePanel(speaker: model.speaker, available: model.speechAvailable)
+                            }
+                            .frame(width: unit * 1.5, height: 440)
+                        }
                     }
-                    .frame(maxWidth: .infinity).frame(height: 500)
+                    .frame(height: 440)
 
                     HStack(alignment: .top, spacing: 12) {
+                        moduleContour(name: "vera-scene", title: "Scene", color: Color(hex: 0xA78BFA)) {
+                            ScenePanel(snapshot: model.scene.snapshot, sceneModel: model.scene)
+                        }
+                        .frame(maxWidth: .infinity).frame(height: 500)
+
                         moduleContour(name: "vera-core", title: "Core", color: Color(hex: 0xFACC15)) {
                             CorePanel(inbox: model.core, agent: model.agent)
                         }
-                        .frame(maxWidth: .infinity).frame(height: 300)
-
-                        moduleContour(name: "vera-response", title: "Response", color: Color(hex: 0x4ADE80)) {
-                            ResponsePanel(speaker: model.speaker, available: model.speechAvailable)
-                        }
-                        .frame(maxWidth: .infinity).frame(height: 300)
+                        .frame(maxWidth: .infinity).frame(height: 500)
                     }
 
-                    storageContour
+                    GeometryReader { geometry in
+                        let unit = (geometry.size.width - 12) / 3
+                        HStack(alignment: .top, spacing: 12) {
+                            busContour
+                                .frame(width: unit * 2, height: 370)
+
+                            storageContour
+                                .frame(width: unit, height: 370)
+                        }
+                    }
+                    .frame(height: 370)
                 }
                 .padding(14)
             }
@@ -115,7 +145,8 @@ struct ContentView: View {
                         .accessibilityHint("Включает или выключает потоковый захват микрофона")
                         .disabled(model.isMicrophoneStarting)
                         waveformView(model.microphoneWaveform)
-                            .frame(width: 250, height: 42)
+                            .frame(minWidth: 180, maxWidth: 250)
+                            .frame(height: 42)
                             .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white.opacity(0.06), lineWidth: 1))
                         Spacer(minLength: 0)
@@ -133,7 +164,7 @@ struct ContentView: View {
                         }
                         Spacer()
                         if model.isMicrophoneListening {
-                            Text("RMS \(model.microphoneRMS, format: .number.precision(.fractionLength(3))) · пик \(model.microphonePeak, format: .number.precision(.fractionLength(2)))")
+                            Text("\(model.microphoneDBFS, format: .number.precision(.fractionLength(1))) dBFS · RMS \(model.microphoneRMS, format: .number.precision(.fractionLength(3))) · пик \(model.microphonePeak, format: .number.precision(.fractionLength(2)))")
                         }
                     }
                     .font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.52))
@@ -161,30 +192,95 @@ struct ContentView: View {
                 }
                 Spacer(minLength: 0)
             }
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 0) {
-                    micContent
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                Divider()
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 7) {
-                        Image(systemName: "waveform.path.ecg").font(.system(size: 11, weight: .semibold)).foregroundStyle(accent)
-                        Text("Анализаторы").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.88))
-                    }
-                    ScrollView {
-                        analyzersContent
-                    }
-                    .scrollIndicators(.automatic)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(height: 348)
+            micContent
+            spectrumView
+            Spacer(minLength: 0)
         }
         .padding(10)
         .background(.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: 0x38BDF8).opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+    }
+
+    private var spectrumView: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("СПЕКТРОГРАММА")
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.58))
+                Spacer()
+                Text("0–8 кГц")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+            HStack(spacing: 5) {
+                VStack(alignment: .trailing) {
+                    Text("8к")
+                    Spacer()
+                    Text("4к")
+                    Spacer()
+                    Text("0")
+                }
+                .font(.system(size: 8, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.42))
+                .frame(width: 20, height: 112)
+
+                spectrumCanvas(model.microphoneSpectrum)
+                    .frame(height: 112)
+                    .background(.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 4))
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(.white.opacity(0.06), lineWidth: 1))
+                    .accessibilityLabel("Спектрограмма микрофона: частоты от 0 до 8 килогерц за последние пять секунд")
+            }
+            HStack {
+                Text("−5 с")
+                Spacer()
+                Text("−2,5 с")
+                Spacer()
+                Text("сейчас")
+            }
+            .font(.system(size: 8, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.42))
+            .padding(.leading, 25)
+        }
+    }
+
+    private func spectrumCanvas(_ frames: [LiveSpectrumFrame]) -> some View {
+        Canvas { context, size in
+            let grid = Color.white.opacity(0.08)
+            for fraction in [CGFloat(0.25), 0.5, 0.75] {
+                var vertical = Path()
+                let x = size.width * fraction
+                vertical.move(to: CGPoint(x: x, y: 0))
+                vertical.addLine(to: CGPoint(x: x, y: size.height))
+                context.stroke(vertical, with: .color(grid), lineWidth: 1)
+            }
+            for fraction in [CGFloat(0.5)] {
+                var horizontal = Path()
+                let y = size.height * fraction
+                horizontal.move(to: CGPoint(x: 0, y: y))
+                horizontal.addLine(to: CGPoint(x: size.width, y: y))
+                context.stroke(horizontal, with: .color(grid), lineWidth: 1)
+            }
+
+            let now = Date()
+            let columnWidth = max(1, size.width * 0.16 / 5)
+            let bandHeight = size.height / CGFloat(LiveSpectrumAnalyzer.bandCount)
+            for frame in frames {
+                let age = now.timeIntervalSince(frame.timestamp)
+                guard (0...5).contains(age), frame.bandsDBFS.count == LiveSpectrumAnalyzer.bandCount else { continue }
+                let x = size.width * CGFloat(1 - age / 5)
+                for (band, dbfs) in frame.bandsDBFS.enumerated() {
+                    let strength = CGFloat(max(0, min(1, (dbfs + 90) / 90)))
+                    guard strength > 0 else { continue }
+                    let color = Color(red: 0.3 + 0.7 * strength,
+                                      green: 0.03 + 0.13 * strength,
+                                      blue: 0.28 + 0.62 * strength,
+                                      opacity: 0.12 + 0.88 * strength)
+                    let rect = CGRect(x: x - columnWidth, y: size.height - CGFloat(band + 1) * bandHeight,
+                                      width: columnWidth + 1, height: bandHeight + 0.4)
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+        }
     }
 
     private var analyzersContent: some View {
@@ -496,29 +592,32 @@ struct ContentView: View {
                 Text("ЧТО СОХРАНЯЕТСЯ · ГДЕ")
                     .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.white.opacity(0.42))
             }
-            HStack(alignment: .top, spacing: 18) {
-                storageItem("Образцы голосов", "Копируются в ~/Library/Application Support/VeraSensorPrototype/Users/voice-samples/")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Люди и векторы").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.82))
-                    HStack(spacing: 6) {
-                        Image(systemName: "person.2.fill").font(.system(size: 11)).foregroundStyle(.green.opacity(0.9))
-                        Text("Людей: \(model.references.count) · голосов: \(model.references.reduce(0) { $0 + $1.templateCount })")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.88))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    storageItem("Образцы голосов", "Копируются в ~/Library/Application Support/VeraSensorPrototype/Users/voice-samples/")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Люди и векторы").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.82))
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.2.fill").font(.system(size: 11)).foregroundStyle(.green.opacity(0.9))
+                            Text("Людей: \(model.references.count) · голосов: \(model.references.reduce(0) { $0 + $1.templateCount })")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.88))
+                        }
+                        Text("~/Library/Application Support/VeraSensorPrototype/Users/people.sqlite")
+                            .font(.system(size: 9, design: .monospaced)).foregroundStyle(.green.opacity(0.75))
+                            .lineLimit(2).textSelection(.enabled)
                     }
-                    Text("~/Library/Application Support/VeraSensorPrototype/Users/people.sqlite")
-                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(.green.opacity(0.75))
-                        .lineLimit(2).textSelection(.enabled)
+                    storageItem("Логи моделей", "~/Library/Application Support/VeraSensorPrototype/Logs/")
+                    storageItem("Лента звука", "Всё, что слышит микрофон: WAV 16 кГц mono, по файлу на час, бессрочно (~115 МБ/ч) · ~/Library/Application Support/VeraSensorPrototype/Tape/<день>/<час>.wav")
+                    storageItem("Память Core", "Факты и история задач, JSONL (бессрочно, до 20 МБ на файл) · ~/Library/Application Support/VeraSensorPrototype/Memory/")
+                    storageItem("Навыки", "Markdown-файлы с описанием в шапке; Core видит список и подгружает текст по read_skill · ~/Library/Application Support/VeraSensorPrototype/Skills/")
+                    storageItem("Журнал модели", "Каждый запрос и ответ модели, без заголовков авторизации · ~/Library/Application Support/VeraSensorPrototype/Journal/")
+                    storageItem("Рабочая папка агента", "Единственное место, где Core читает и пишет файлы · ~/Library/Application Support/VeraSensorPrototype/Workspace/")
+                    storageItem("Запись шины", "Сообщения Sensors, один JSONL на сессию микрофона · ~/Library/Application Support/VeraSensorPrototype/Recordings/")
+                    storageItem("Ревизии сцены", "Только в памяти процесса; сохраняются лишь как сообщения scene в шине, которые не пишутся.", color: .orange)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                storageItem("Логи моделей", "~/Library/Application Support/VeraSensorPrototype/Logs/")
-                storageItem("Лента звука", "Всё, что слышит микрофон: WAV 16 кГц mono, по файлу на час, бессрочно (~115 МБ/ч) · ~/Library/Application Support/VeraSensorPrototype/Tape/<день>/<час>.wav")
-                storageItem("Память Core", "Факты и история задач, JSONL (бессрочно, до 20 МБ на файл) · ~/Library/Application Support/VeraSensorPrototype/Memory/")
-                storageItem("Навыки", "Markdown-файлы с описанием в шапке; Core видит список и подгружает текст по read_skill · ~/Library/Application Support/VeraSensorPrototype/Skills/")
-                storageItem("Журнал модели", "Каждый запрос и ответ модели, без заголовков авторизации · ~/Library/Application Support/VeraSensorPrototype/Journal/")
-                storageItem("Рабочая папка агента", "Единственное место, где Core читает и пишет файлы · ~/Library/Application Support/VeraSensorPrototype/Workspace/")
-                storageItem("Запись шины", "Сообщения Sensors, один JSONL на сессию микрофона · ~/Library/Application Support/VeraSensorPrototype/Recordings/")
-                storageItem("Ревизии сцены", "Только в памяти процесса; сохраняются лишь как сообщения scene в шине, которые не пишутся.", color: .orange)
+                .padding(.trailing, 4)
             }
+            .scrollIndicators(.automatic)
         }
         .padding(12)
         .background(Color(red: 0.055, green: 0.075, blue: 0.065), in: RoundedRectangle(cornerRadius: 12))

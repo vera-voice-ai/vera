@@ -8,6 +8,7 @@ CONTENTS="$APP/Contents"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$ROOT/.build/debug/VeraSensorPrototype" "$CONTENTS/MacOS/VeraSensorPrototype"
 cp -R "$ROOT/.build/debug/VeraSensorPrototype_Sensors.bundle" "$CONTENTS/Resources/"
+cp -R "$ROOT/.build/debug/VeraSensorPrototype_SceneAnalyzers.bundle" "$CONTENTS/Resources/"
 cp "$ROOT/Info.plist" "$CONTENTS/Info.plist"
 # Sign with a stable identity so macOS keeps the microphone/Keychain grants across
 # rebuilds: the designated requirement is then "bundle id + certificate", not the
