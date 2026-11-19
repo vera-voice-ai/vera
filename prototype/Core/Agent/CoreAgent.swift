@@ -68,6 +68,13 @@ public final class CoreAgent {
 
     private let loop: AgentLoop?
     private var handled: Set<String> = []
+    /// Remembers that a turn was taken (a turn is handed over once); forgets the oldest ones in bulk so the set stays small.
+    private func firstTime(_ turnID: String) -> Bool {
+        if handled.count > 2_000 { handled.removeAll() }
+        return handled.insert(turnID).inserted
+    }
+    /// The task whose model call is running right now: a question about the work does not report itself.
+    @TaskLocal static var currentTaskID: String?
     private var pendingScene: [String: CheckedContinuation<String?, Never>] = [:]
     /// At most `maxParallelTasks` tasks run at once; the rest wait in the order heard.
     /// After a question of hers the owner's next short reply is taken as the answer even when the voice was not recognised:
@@ -139,7 +146,7 @@ public final class CoreAgent {
                let until = awaitingReplyUntil, clock() < until, mode == .ready || mode == .working,
                message.payload["reason"] == "not_addressed", let heardID = message.payload["turn_id"],
                (1...4).contains((message.payload["text"] ?? "").split(whereSeparator: { !$0.isLetter }).count),
-               handled.insert(heardID).inserted {
+               firstTime(heardID) {
                 awaitingReplyUntil = nil
                 touch()
                 await startTask(request: message.payload["text"] ?? "", turnID: heardID, bus: bus, causation: message.id, readyAt: message.timestamp,
@@ -147,7 +154,7 @@ public final class CoreAgent {
                 continue
             }
             guard isEnabled, message.domain == .scene, message.kind == .event, message.type == "scene.turn.ready",
-                  let turnID = message.payload["turn_id"], handled.insert(turnID).inserted else { continue }
+                  let turnID = message.payload["turn_id"], firstTime(turnID) else { continue }
             let rawText = message.payload["text"] ?? ""
             let activation = Self.isActivation(rawText)
             let loudness = message.payload["loudness_relative"] ?? ""
@@ -514,12 +521,14 @@ public final class CoreAgent {
                 }
             }
         }
-        var result = await loop.run(request: request, context: context, onEvent: onEvent)
+        var result = await Self.$currentTaskID.withValue(id) { await loop.run(request: request, context: context, onEvent: onEvent) }
         // Called by her name she must answer: "[молчу]" is only for replies that are plainly not hers.
         if mustAnswer, result.succeeded, Self.isSilenceMarker(result.answer) {
             chunker.withLock { $0 = SpeechChunker() }   // the marker of the first try must not leak into her spoken answer
-            result = await loop.run(request: request + "\n(Тебя назвали по имени: ответь по существу, ответ «[молчу]» здесь недопустим.)",
-                                    context: context, onEvent: onEvent)
+            result = await Self.$currentTaskID.withValue(id) {
+                await loop.run(request: request + "\n(Тебя назвали по имени: ответь по существу, ответ «[молчу]» здесь недопустим.)",
+                               context: context, onEvent: onEvent)
+            }
         }
         update(id) {
             $0.state = result.succeeded ? .done : (result.error == "cancelled" ? .cancelled : .failed)
@@ -564,7 +573,8 @@ public final class CoreAgent {
         task.state = .queued
         task.readyAt = readyAt
         tasks.insert(task, at: 0)
-        if tasks.count > 20 { tasks.removeLast(tasks.count - 20) }
+        // The list keeps the last 20, but never drops a task that is still running or waiting.
+        while tasks.count > 20, let index = tasks.lastIndex(where: { $0.state != .running && $0.state != .queued }) { tasks.remove(at: index) }
     }
 
     private func update(_ id: String, _ change: (inout Task) -> Void) {
@@ -613,7 +623,7 @@ public final class CoreAgent {
         let current = now ?? clock()
         func shorten(_ text: String) -> String { text.count > 70 ? String(text.prefix(70)) + "…" : text }
         var lines: [String] = []
-        for task in tasks.prefix(8) {
+        for task in tasks.prefix(9) where task.id != Self.currentTaskID {
             let age = Int(current.timeIntervalSince(task.startedAt))
             switch task.state {
             case .running: lines.append("идёт \(age) с: \(shorten(task.request))")

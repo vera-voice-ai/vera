@@ -64,7 +64,6 @@ struct CorePanel: View {
                 Text(agent.unavailableReason.map { "агент недоступен: \($0)" } ?? "агент выключен (запуск с --agent), работает только в песочнице")
                     .font(.system(size: 10)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)
             }
-            memoryRow
             if agent.tasks.isEmpty {
                 Text("задач ещё не было").font(.system(size: 11)).foregroundStyle(.white.opacity(0.42))
             } else {
@@ -91,6 +90,7 @@ struct CorePanel: View {
                     }
                 }
             }
+            memoryRow
             Spacer(minLength: 0)
         }
     }

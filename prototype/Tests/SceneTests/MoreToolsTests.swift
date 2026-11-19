@@ -37,7 +37,7 @@ private func tempDirectory(_ name: String) throws -> URL {
     let day = DateComponents(calendar: calendar, year: 2026, month: 11, day: 18, hour: 21, minute: 5).date!
     #expect(store.add("купить зарядку для часов", at: day, calendar: calendar) == "2026-11-18.md")
     store.add("позвонить Наташе насчёт билетов", at: day.addingTimeInterval(86_400), calendar: calendar)
-    #expect(store.search("зарядка часов") == [])            // words are matched as written: "зарядку" is not "зарядка"
+    #expect(store.search("зарядка часов") == ["2026-11-18 21:05 купить зарядку для часов"])   // endings do not matter
     #expect(store.search("зарядку часов") == ["2026-11-18 21:05 купить зарядку для часов"])
     #expect(store.search("наташе").count == 1)
     #expect(store.search("").count == 2)                      // an empty query gives the latest notes, newest first
@@ -83,4 +83,32 @@ private func tempDirectory(_ name: String) throws -> URL {
     #expect(agent.statusText().contains("идёт") && agent.statusText().contains("посмотри файлы"))
     _ = await running.value
     #expect(agent.statusText().contains("готово") && agent.statusText().contains("Готово."))
+}
+
+@MainActor @Test func theStatusReportDoesNotCountTheTaskThatAsks() async {
+    final class Holder: @unchecked Sendable { weak var agent: CoreAgent? }
+    struct Model: ChatModel {
+        func respond(messages: [ChatMessage], tools: [ToolDefinition], onText: @escaping @Sendable (String) -> Void) async throws -> ChatTurn {
+            var turn = ChatTurn()
+            if !messages.contains(where: { $0.role == .tool }) { turn.toolCalls = [ToolCall(id: "c1", name: "list_tasks", arguments: "{}")]; return turn }
+            turn.text = messages.last(where: { $0.role == .tool })?.content ?? ""
+            return turn
+        }
+    }
+    let holder = Holder()
+    let tools = ToolRegistry.taskTools { await MainActor.run { holder.agent?.statusText() ?? "" } }
+    let agent = CoreAgent(loop: AgentLoop(model: Model(), tools: tools, systemPrompt: "s"))
+    agent.includesSceneContext = false
+    holder.agent = agent
+    let first = await agent.run(request: "первая просьба")
+    #expect(first.answer == "задач ещё не было")            // the only task is the one that asks, so it is not listed
+    let second = await agent.run(request: "что с задачей?")
+    #expect(second.answer.contains("первая просьба") && !second.answer.contains("что с задачей?"))
+}
+
+@Test func theNewGatesAreOutOfHerReachWhenSheChangesHerOwnCode() {
+    for file in ["Core/Agent/ShellTool.swift", "Core/Agent/BrowserTools.swift", "Core/Agent/WebTools.swift", "Core/Agent/MacControl.swift",
+                 "Core/Agent/Tools.swift", "Core/Agent/AgentLoop.swift", "Browser/BrowserEngine.swift", "Core/Agent/CoreAgent.swift"] {
+        #expect(SelfModifier.protectedFiles.contains(file), "\(file) must be protected")
+    }
 }

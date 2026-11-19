@@ -13,11 +13,20 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     private var notice: String?
     /// Whether the window is brought to the front when it is used. Tests turn it off.
     public var showsWindow = true
+    /// An open window nobody used for this long closes itself (seconds), so a page does not stay open for hours.
+    public var idleLimit: TimeInterval = 600
+    public var idleCheckInterval: TimeInterval = 30
+    private var lastUsed = Date()
+    /// Actions in progress: the window is not idle while she is working in it.
+    private var operations = 0
+    private var idleWatch: Swift.Task<Void, Never>?
 
     public override init() { super.init() }
 
     /// For tests: a page from a string, bypassing the address rules.
     func loadHTML(_ html: String) async -> BrowserPage {
+        operations += 1
+        defer { operations -= 1; lastUsed = Date() }
         let view = ensureWindow()
         view.loadHTMLString(html, baseURL: URL(string: "https://example.test/"))
         await settle()
@@ -27,6 +36,8 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     // MARK: BrowserDriving
 
     public func open(_ url: URL) async -> BrowserPage {
+        operations += 1
+        defer { operations -= 1; lastUsed = Date() }
         if let refusal = BrowserGate.urlRefusal(url) { return BrowserPage(error: refusal) }
         let view = ensureWindow()
         notice = nil
@@ -38,6 +49,8 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     public func read() async -> BrowserPage { await snapshot() }
 
     public func click(_ id: Int) async -> BrowserPage {
+        operations += 1
+        defer { operations -= 1; lastUsed = Date() }
         guard let view = webView else { return BrowserPage(error: "окно браузера ещё не открыто") }
         _ = try? await view.evaluateJavaScript("(function(){var e=document.querySelector('[data-vera-id=\"\(id)\"]'); if(!e) return 'none'; e.scrollIntoView({block:'center'}); e.click(); return 'ok';})()")
         await settle()
@@ -45,6 +58,8 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     }
 
     public func type(_ id: Int, text: String, submit: Bool) async -> BrowserPage {
+        operations += 1
+        defer { operations -= 1; lastUsed = Date() }
         guard let view = webView else { return BrowserPage(error: "окно браузера ещё не открыто") }
         let literal = Self.jsonString(text)
         let script = """
@@ -61,6 +76,8 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     }
 
     public func back() async -> BrowserPage {
+        operations += 1
+        defer { operations -= 1; lastUsed = Date() }
         guard let view = webView, view.canGoBack else { return BrowserPage(error: "назад идти некуда") }
         view.goBack()
         await settle()
@@ -68,6 +85,8 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     }
 
     public func close() async {
+        idleWatch?.cancel()
+        idleWatch = nil
         webView?.navigationDelegate = nil
         webView?.stopLoading()
         window?.close()
@@ -93,6 +112,14 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
         if showsWindow { window.orderFrontRegardless() }
         self.window = window
         self.webView = view
+        lastUsed = Date()
+        idleWatch = Swift.Task { @MainActor [weak self] in
+            while !Swift.Task.isCancelled {
+                try? await Swift.Task.sleep(for: .seconds(self?.idleCheckInterval ?? 30))
+                guard let self, self.webView != nil else { return }
+                if self.operations == 0, Date().timeIntervalSince(self.lastUsed) > self.idleLimit { await self.close(); return }
+            }
+        }
         return view
     }
 
@@ -124,6 +151,7 @@ public final class BrowserEngine: NSObject, BrowserDriving, WKNavigationDelegate
     """
 
     private func snapshot() async -> BrowserPage {
+        lastUsed = Date()   // idle time counts from the end of what she did, not from its start
         guard let view = webView else { return BrowserPage(error: "окно браузера ещё не открыто") }
         guard let json = (try? await view.evaluateJavaScript(Self.snapshotScript)) as? String,
               let data = json.data(using: .utf8), let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {

@@ -28,14 +28,15 @@ public final class NoteStore: @unchecked Sendable {
 
     /// Notes whose text has every word of the query, newest first, as "2026-11-19 05:44 text".
     public func search(_ query: String, limit: Int = 8) -> [String] {
-        let words = query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count > 1 }
+        let wanted = MemoryStore.words(query)
         let files = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).filter { $0.hasSuffix(".md") }.sorted(by: >)
         var found: [String] = []
         for name in files {
             let lines = ((try? String(contentsOf: directory.appending(path: name), encoding: .utf8)) ?? "").split(separator: "\n").reversed()
             for line in lines where line.hasPrefix("- ") {
                 let text = line.dropFirst(2)
-                if words.allSatisfy({ text.lowercased().contains($0) }) { found.append(name.replacingOccurrences(of: ".md", with: "") + " " + text) }
+                let have = MemoryStore.words(String(text))
+                if wanted.isSubset(of: have) { found.append(name.replacingOccurrences(of: ".md", with: "") + " " + text) }
                 if found.count >= limit { return found }
             }
         }

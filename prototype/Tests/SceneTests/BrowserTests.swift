@@ -109,3 +109,13 @@ private final class FakeBrowser: BrowserDriving, @unchecked Sendable {
     #expect(await engine.loadHTML("<title>Снова</title>").title == "Снова")   // and a fresh window starts on demand
     await engine.close()
 }
+
+@MainActor @Test func anIdleBrowserWindowClosesItself() async {
+    let engine = BrowserEngine()
+    engine.showsWindow = false
+    engine.idleLimit = 0.3
+    engine.idleCheckInterval = 0.1
+    #expect(await engine.loadHTML("<title>Раз</title>").title == "Раз")
+    try? await Task.sleep(for: .milliseconds(900))
+    #expect(await engine.read().error != nil)               // nobody used it: it closed itself
+}

@@ -41,8 +41,13 @@ public final class SelfModifier: @unchecked Sendable {
     }
 
     /// The files that implement the gates and the owner-only rule. She can read them but not write them.
+    /// Files that hold a safety gate or a rule she must not rewrite for herself: the self-change gates, the command and
+    /// browser gates, the network policy, the Mac action list, the file tools (trash, write lock) and her own prompt.
     static let protectedFiles = ["Core/Agent/SelfModifier.swift", "Core/Agent/CoreAgent.swift", "Scene/SceneBuilder.swift",
-                                 "Evaluation/apply-self.sh", "Evaluation/night-run.sh"]
+                                 "Evaluation/apply-self.sh", "Evaluation/night-run.sh",
+                                 "Core/Agent/ShellTool.swift", "Core/Agent/BrowserTools.swift", "Core/Agent/WebTools.swift",
+                                 "Core/Agent/MacControl.swift", "Core/Agent/Tools.swift", "Core/Agent/AgentLoop.swift",
+                                 "Browser/BrowserEngine.swift", "Package.swift"]
 
     // MARK: Gates
 
