@@ -1,0 +1,74 @@
+{
+  "about": "Vera's ears: sherpa-onnx C library and the Russian speech models, all inside Vera03.app. scripts/build-ears.sh fetches and checks them; --pin records the sha256.",
+  "sherpa_onnx": "v2.0.1",
+  "items": [
+    {
+      "name": "sherpa-onnx",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-osx-arm64-shared-no-tts-lib.tar.bz2",
+      "sha256": "ac5594ad237db56ec4a6c4b3fc48700441b33a07bb71c235f35530a52a93f2e3",
+      "dest": "lib"
+    },
+    {
+      "name": "gigaam-v3",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16.tar.bz2",
+      "sha256": "20e41e160efa6f2460a7ef6554cdbbb9e8fffb2b92e6bc708e9406bd8b9256ea",
+      "dest": "models/gigaam"
+    },
+    {
+      "name": "t-one",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-t-one-russian-2025-09-08.tar.bz2",
+      "sha256": "b9c907450e99a6e5049e279bf18368a17db0bdc5e63b7fa978943138debbe3ae",
+      "dest": "models/t-one"
+    },
+    {
+      "name": "silero-vad",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "dest": "models/vad/silero_vad.onnx"
+    },
+    {
+      "name": "campplus",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx",
+      "sha256": "53cab20ba8f2eb2f6e2d89ecc18e88ef3222169b61b4419cbc13666744a4574b",
+      "dest": "models/speaker/campplus.onnx"
+    }
+  ],
+  "mouth": {
+    "about": "Vera's mouth: Silero TTS (voice baya) in its own Python inside the box. scripts/build-mouth.sh builds it.",
+    "python": "the builder's CPython from scripts/build-hermes.sh (~/.vera03/hermes/tools/python-*), copied, not shared with Hermes",
+    "pip": [
+      "torch==2.14.1",
+      "numpy==2.5.5",
+      "scipy==1.18.1",
+      "onnxruntime==1.32.0"
+    ],
+    "model": {
+      "name": "silero-v5-ru",
+      "url": "https://models.silero.ai/models/tts/ru/v5_ru.pt",
+      "sha256": "7ba04d42340fe0398042eed2e0d12d62e23096d626b1b9feff4dcb1309197ab4",
+      "dest": "models/v5_ru.pt"
+    },
+    "speaker": "baya",
+    "sample_rate": 48000,
+    "smart_turn": {
+      "name": "smart-turn-v3.2",
+      "url": "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx",
+      "sha256": "2bb026316b14a660486a75b1733cd3fbab8c2fd0314dc9af7be49f8cca967e4f",
+      "dest": "models/smart-turn-v3.2-cpu.onnx"
+    },
+    "ios": {
+      "about": "The same Silero voice on the iPhone, without Python: scripts/build-mouth-ios.sh rebuilds the model's networks as plain PyTorch (scripts/mouth-ios), exports three ONNX files and the text side's data from the model above, and checks them against the original. The phone runs them on its onnxruntime (ios → sherpa-onnx), the text side is Swift (app/Sources/SileroVoice).",
+      "pip": [
+        "onnx==1.23.2",
+        "onnxscript==0.7.2"
+      ],
+      "opset": 18
+    }
+  },
+  "ios": {
+    "about": "The iPhone app's ears and voice: sherpa-onnx built from source for iOS (static, with TTS) by scripts/build-ears-ios.sh; onnxruntime comes from its build script.",
+    "sherpa_onnx": "v2.0.1",
+    "commit": "af2d8d81dbfa61c4cea4c568da78f3982edca005",
+    "cmake": "3.31.6"
+  }
+}

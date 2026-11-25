@@ -1,0 +1,25 @@
+name: vera-pulse
+label: Vera Pulse
+version: "0.3.0"
+author: Vera 0.3
+description: >
+  Observer for Vera 0.3 (the macOS board). Subscribes to Hermes lifecycle hooks and appends
+  sanitized events (names, ids, durations, statuses, token counts — never message text,
+  tool arguments or model output) to $HERMES_HOME/vera-pulse/<date>.jsonl.
+  Changes nothing in the agent's behaviour: every hook returns None.
+requires_hermes: ">=0.23.2"
+provides_tools: []
+provides_hooks:
+  - on_session_open
+  - on_session_start
+  - on_session_end
+  - pre_api_request
+  - post_api_request
+  - api_request_error
+  - pre_tool_call
+  - post_tool_call
+  - subagent_start
+  - subagent_stop
+  - on_human_input_request
+  - on_human_input_resolved
+  - post_compaction

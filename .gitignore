@@ -1,0 +1,9 @@
+.DS_Store
+.build/
+dist/
+*.xcodeproj/
+.swiftpm/
+__pycache__/
+*.pyc
+.claude/settings.local.json
+phone/Local.xcconfig

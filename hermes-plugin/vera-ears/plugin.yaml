@@ -1,0 +1,11 @@
+name: vera-ears
+label: Vera Ears
+version: "0.3.0"
+author: Vera 0.3
+description: >
+  Speech-to-text provider "gigaam" for Hermes: voice messages (Telegram and other platforms) are transcribed
+  by GigaAM from Vera 0.3's box (sherpa-onnx, offline), through `Vera --transcribe <file>`.
+  Select it with stt.provider: gigaam.
+requires_hermes: ">=0.23.3"
+provides_tools: []
+provides_hooks: []

@@ -1,0 +1,13 @@
+// Сборочные настройки iPhone-приложения (оба таргета). Личные значения владельца — в Local.xcconfig рядом:
+// его нет в git, образец — Local.example.xcconfig. Скрипты (phone-deploy.sh, phone-music.sh…) читают его же.
+
+// Префикс идентификаторов: приложение — $(VERA_BUNDLE_PREFIX).phone, расширение — ….phone.widgets.
+// С бесплатным аккаунтом Apple идентификатор должен быть своим у каждого — поменяй префикс в Local.xcconfig.
+VERA_BUNDLE_PREFIX = space.vera.v03
+// Команда подписи (Team ID из Xcode → Settings → Accounts). Пусто — Xcode попросит выбрать.
+DEVELOPMENT_TEAM =
+// Адрес туннеля к Вере на Маке (например, Cloudflare Tunnel → 127.0.0.1:8765), без схемы: vera.example.com.
+// Нужен только для ввода кода вручную: QR с Мака сам несёт адрес. Пусто — сопряжение только по QR.
+VERA_TUNNEL_HOST =
+
+#include? "Local.xcconfig"

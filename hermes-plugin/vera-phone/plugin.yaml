@@ -1,0 +1,12 @@
+name: vera-phone
+label: Vera Phone
+version: "0.3.0"
+author: Vera 0.3
+description: >
+  Tools for the iPhone app of Vera 0.3: phone_route builds a route in the phone's navigator (Google Navigation SDK on
+  the phone) and can start the guidance, phone_route_status tells where the trip stands, phone_route_stop ends it;
+  phone_music_play / phone_music_control / phone_music_status drive the phone's music player (its own library).
+  Transport only: requests go through Vera's data folder (phone-bridge/), Vera hands them to the paired phone.
+requires_hermes: ">=0.23.3"
+provides_tools: [phone_route, phone_route_status, phone_route_stop, phone_music_play, phone_music_control, phone_music_status]
+provides_hooks: []

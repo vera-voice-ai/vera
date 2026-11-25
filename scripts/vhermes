@@ -1,0 +1,11 @@
+#!/bin/zsh
+# Hermes CLI exactly as Vera runs it (for debugging): the payload (Vera03.app or ~/.vera03/build/payload),
+# Vera's data (HERMES_HOME), Vera's own HOME, no inherited environment. Example: scripts/vhermes gateway status
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+APP_PAYLOAD="$REPO/app/.build/Vera03.app/Contents/Resources/hermes"
+PAYLOAD="${VERA_HERMES_PAYLOAD:-$([[ -x "$APP_PAYLOAD/bin/hermes" ]] && echo "$APP_PAYLOAD" || echo "$HOME/.vera03/build/payload")}"
+DATA="${VERA_DATA_ROOT:-$HOME/Library/Application Support/Vera03}"
+exec env -i HOME="$DATA/home" HERMES_HOME="$DATA/hermes" VERA_PULSE_DIR="$DATA/hermes/vera-pulse" \
+  PATH="$PAYLOAD/bin:/usr/bin:/bin:/usr/sbin:/sbin" LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SHELL=/bin/zsh \
+  PYTHONNOUSERSITE=1 USER="$USER" LOGNAME="$LOGNAME" TMPDIR="$TMPDIR" TERM="${TERM:-xterm-256color}" \
+  "$PAYLOAD/bin/hermes" "$@"

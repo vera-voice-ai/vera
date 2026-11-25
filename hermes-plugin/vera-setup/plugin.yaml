@@ -1,0 +1,11 @@
+name: vera-setup
+label: Vera Setup
+version: "0.3.0"
+author: Vera 0.3
+description: >
+  Settings bridge for Vera 0.3's «Настройка» window. Registers gateway RPC
+  plugin.vera-setup.set_main_model, which makes a provider/model the profile's default
+  through the same code path as Hermes Desktop's Settings → Models (POST /api/model/set).
+requires_hermes: ">=0.23.3"
+provides_tools: []
+provides_hooks: []

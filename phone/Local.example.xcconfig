@@ -1,0 +1,4 @@
+// Образец: скопируй в Local.xcconfig (его нет в git) и впиши свои значения.
+VERA_BUNDLE_PREFIX = com.example.vera
+DEVELOPMENT_TEAM = ABCDE12345
+VERA_TUNNEL_HOST = vera.example.com

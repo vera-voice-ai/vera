@@ -1,0 +1,11 @@
+name: vera-context
+label: Vera Context
+version: "0.3.0"
+author: Vera 0.3
+description: >
+  Tells each of Vera's channels what it is: a system prompt section with a short map of all three (MacBook «Вера»,
+  iPhone «iPhone», Telegram) and the details of the session's own channel — how it is run and how its words reach
+  the owner. Sessions made before the plugin get the same text once, with their next turn.
+requires_hermes: ">=0.23.3"
+provides_tools: []
+provides_hooks: [pre_llm_call]

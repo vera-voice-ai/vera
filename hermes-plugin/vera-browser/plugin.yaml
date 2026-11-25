@@ -1,0 +1,11 @@
+name: vera-browser
+label: Vera Browser
+version: "0.3.0"
+author: Vera 0.3
+description: >
+  Vera's own browser window on the Mac: tool mac_browser opens it (or brings it forward), hides, closes it or tells
+  what is open. Hermes' browser tools work in that window (browser.cdp_url → 127.0.0.1:9333), so the owner sees the
+  pages and does what is his — a CAPTCHA, the final «Откликнуться». Runs `Vera --browser <action>` (VERA_EARS_BIN).
+requires_hermes: ">=0.23.3"
+provides_tools: [mac_browser]
+provides_hooks: [pre_tool_call]
